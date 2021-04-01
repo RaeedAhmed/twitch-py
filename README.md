@@ -2,6 +2,7 @@ A simple webapp for managing Twitch user follows and browsing live streams/video
 
 ```bash
 git clone https://github.com/RaeedAhmed/twitch-py.git
+cd twitch-py/
 python3 -m venv .venv
 source .venv/bin/activate
 pip install .
