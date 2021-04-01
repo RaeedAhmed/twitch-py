@@ -15,6 +15,7 @@ peewee = "^3.14.4"
 toml = "^0.10.2"
 waitress = "^2.0.0"
 streamlink = "^2.1.1"
+nox = "^2020.12.31"
 
 [tool.poetry.dev-dependencies]
 black = "^20.8b1"
