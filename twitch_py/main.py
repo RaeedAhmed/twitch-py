@@ -173,11 +173,12 @@ class Fetch:
             asyncio.run(Db.cache(g_to_cache, mode="games"))
         for stream in streams:
             channel: Streamer = Streamer.get(int(stream["user_id"]))
-            game: Game = Game.get(int(stream["game_id"])) or "Streaming"
+            try:
+                game = Game.get(int(stream["game_id"]))
+                stream["box_art_url"] = game.box_art_url
+            except ValueError:
+                stream["box_art_url"] = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
             stream["profile_image_url"] = channel.profile_image_url
-            stream["box_art_url"] = (
-                game.box_art_url or "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
-            )
             stream["uptime"] = time_elapsed(stream["started_at"])
             stream["thumbnail_url"] = stream["thumbnail_url"].replace("-{width}x{height}", "")
         streams.sort(key=lambda stream: stream["viewer_count"], reverse=True)
@@ -239,7 +240,7 @@ class Db:
                 session.delete(url)
             else:
                 session.post(url)
-        Streamer.update(followed=not channel.followed).execute()
+        Streamer.update(followed=not channel.followed).where(Streamer.id == channel.id).execute()
 
 
 """Application Routes"""
@@ -265,12 +266,6 @@ def authenticate():
         Streamer.update(followed=True).execute()
         return redirect("/")
     return template("authenticate.tpl")
-
-
-@route("/settings")
-def settings():
-    config = toml.load("config/settings.toml")
-    return template("settings.tpl", config=config, os=system())
 
 
 @route("/<channel>")
@@ -328,13 +323,19 @@ def search():
                 {
                     int(channel["id"])
                     for channel in results
-                    if not Streamer.get_or_none(int(channel["id"]))
+                    if Streamer.get_or_none(int(channel["id"])) is None
                 },
                 mode="users",
             )
         )
         results = [Streamer.get(int(channel["id"])) for channel in results]
     return template("search.tpl", query=query, mode=mode, results=results)
+
+
+@route("/settings")
+def settings():
+    config = toml.load("config/settings.toml")
+    return template("settings.tpl", config=config, os=system())
 
 
 @route("/config/<filename:path>")
@@ -411,16 +412,19 @@ def process_data(data: list[dict], mode: str) -> list[dict]:
             clip.setdefault("game_name", "Streaming")
             clip["time_since"] = time_elapsed(clip["created_at"])
             clip["thumbnail_url"] = clip["thumbnail_url"].rsplit("-", 1)[0] + ".jpg"
-            gid = int(clip["game_id"]) if clip["game_id"] else None
-            if gid and not Game.select().where(Game.id == gid).exists():
-                to_cache.add(gid)
+            try:
+                if Game.get_or_none(gid := int(clip["game_id"])) is None:
+                    to_cache.add(gid)
+            except ValueError:
+                pass
         asyncio.run(Db.cache(to_cache, mode="games"))
         for clip in data:
-            gid = int(clip["game_id"]) if clip["game_id"] else None
-            if gid:
-                game: Game = Game.get(gid)
+            try:
+                game: Game = Game.get(int(clip["game_id"]))
                 clip["box_art_url"] = game.box_art_url
                 clip["game_name"] = game.name
+            except ValueError:
+                pass
         asyncio.run(vod_from_clip(data))
     return data
 
