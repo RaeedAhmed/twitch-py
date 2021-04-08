@@ -13,6 +13,11 @@
                 <li><a href="/settings">Settings</a></li>
             </ul>
         </nav>
+        % if defined('User'):
+        <header>
+            <section><img src="{{User.profile_image_url}}" alt="User.display_name" width="50" loading="lazy">Logged in as {{User.display_name}}</section>
+        </header>
+        % end
         <form action="/search">
             <select name="t" id="type-select">
                 <option value="channels">Channels</option>
