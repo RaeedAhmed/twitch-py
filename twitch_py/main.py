@@ -282,7 +282,7 @@ def channel(channel, mode=None, data=None):
         redirect(f"/{channel.login}")
     elif request.query.get("watch"):
         watch_video(channel.login)
-        mode = "chat"
+        return """<script>setTimeout(function () { window.history.back() });</script>"""
     elif request.query.get("vod"):
         mode = "vod"
         vods = Helix.get_iter(f"videos?user_id={channel.id}&type=archive")
@@ -332,10 +332,27 @@ def search():
     return template("search.tpl", query=query, mode=mode, results=results)
 
 
+@route("/following")
+def following():
+    Db.update_follows()
+    follows = Streamer.select().where(Streamer.followed == True).order_by(Streamer.display_name)
+    return template("following.tpl", follows=follows)
+
+
+@route("/categories/<game>")
+def browse(game):
+    pass
+
+
 @route("/settings")
 def settings():
-    config = toml.load("config/settings.toml")
-    return template("settings.tpl", config=config, os=system())
+    os_ = system()
+    if request.query.get("open"):
+        if os_ == "Linux":
+            Popen("open config/settings.toml", shell=True, close_fds=True)
+            return redirect("/settings")
+    config = toml.load("config/settings.toml")[f"{os_}"]
+    return template("settings.tpl", config=config)
 
 
 @route("/config/<filename:path>")
@@ -366,21 +383,20 @@ def time_elapsed(start: str, d="") -> str:
 
 
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
-    c = toml.load("config/settings.toml")
-    os = system()
-    player = c["player"][os]
-    if c["general"]["multi-stream"] is False:
-        if os == "Linux":
+    os_ = system()
+    c = toml.load("config/settings.toml")[f"{os_}"]
+    if c["multi"] is False:
+        if os_ == "Linux":
             pid, e = Popen("pgrep mpv", shell=True, stdout=PIPE).communicate()
             pid = pid.decode().strip()
             if pid != "":
                 Popen(f"kill {pid}", shell=True, stdout=PIPE).wait()
 
-    if os == "Linux":
+    if os_ == "Linux":
         if mode == "live":
             print("\x1b[1A\x1b[2K\x1b[1A", f"Launching stream twitch.tv/{channel}", sep="\n")
             Popen(
-                f'streamlink -l none -p {player["app"]} -a "{player["args"]}" \
+                f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
                     --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best',
                 shell=True,
                 close_fds=True,
@@ -388,7 +404,7 @@ def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
         else:
             print("\x1b[1A\x1b[2K\x1b[1A", f"Launching video: {url}", sep="\n")
             Popen(
-                f'{player["app"]} {player["args"]} --really-quiet {url}',
+                f'{c["app"]} {c["args"]} --really-quiet {url}',
                 shell=True,
                 close_fds=True,
             )
@@ -397,7 +413,7 @@ def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
 def process_data(data: list[dict], mode: str) -> list[dict]:
     if mode == "vod":
         for vod in data:
-            vod["thumbnail_url"] = vod["thumbnail_url"].replace("%{width}x%{height}", "320x180")
+            vod["thumbnail_url"] = vod["thumbnail_url"].replace("%{width}x%{height}", "480x270")
             if not vod["thumbnail_url"]:
                 vod[
                     "thumbnail_url"
