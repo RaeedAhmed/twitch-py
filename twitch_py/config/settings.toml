@@ -1,15 +1,16 @@
 title = "twitch-py settings"
 
-[general]
-multi-stream = false
-
-[player.Linux]
+[Linux]
+multi = false
 app = "mpv"
 args = "--hwdec=auto --screen=1 --fs --keep-open=yes"
 
-[player.Windows]
+[Windows]
+multi = false
 app = "C:\\Program\\Files\\VideoLAN\\VLC\\vlc.exe"
+args = ""
 
-[player.Darwin]
+[Darwin]
+multi = false
 app = ""
 args = ""
