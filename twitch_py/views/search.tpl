@@ -6,13 +6,13 @@
     % if mode == "categories":
     % for result in results:
     <article>
-        <p><img src="{{result.box_art_url}}" alt="{{result.name}}" width="100">{{result.name}}</p>
+        <p><img src="{{result.box_art_url}}" alt="{{result.name}}" width="100" loading="lazy">{{result.name}}</p>
     </article>
     % end
     % else:
     % for result in results:
     <article>
-        <p><a href="/{{result.login}}"><img src="{{result.profile_image_url}}" alt="{{result.display_name}}" width="75"></a>{{result.display_name}} - {{result.broadcaster_type}}</p>
+        <p><a href="/{{result.login}}"><img src="{{result.profile_image_url}}" alt="{{result.display_name}}" width="75" loading="lazy"></a>{{result.display_name}} - {{result.broadcaster_type}}</p>
         <p>{{result.description}}</p>
     </article>
     % end
