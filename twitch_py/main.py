@@ -137,20 +137,21 @@ class Fetch:
         return User.create(**user)
 
     @staticmethod
-    def follows(id: int) -> list[int]:
-        resp: list[str] = Helix.get_iter(f"users/follows?from_id={id}&first=100")
-        return [int(follow["to_id"]) for follow in resp]
+    def follows(id: int) -> set[int]:
+        resp = Helix.get_iter(f"users/follows?from_id={id}&first=100")
+        return {int(follow["to_id"]) for follow in resp}
 
     @staticmethod
-    async def live(ids: list[int]) -> list[dict]:
-        ids = [ids[x : x + 100] for x in range(0, len(ids), 100)]  # chunks of 100 ids
+    async def live(ids: set[int]) -> list[dict]:
+        tmp = list(ids)
+        id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]  # chunks of 100 ids
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
             stream_list: list[Response] = await asyncio.gather(
                 *(
                     session.get(
-                        f"{Helix.endpoint}/streams?{'&'.join([f'user_id={id}' for id in id_list])}"
+                        f"{Helix.endpoint}/streams?{'&'.join([f'user_id={i}' for i in i_list])}"
                     )
-                    for id_list in ids
+                    for i_list in id_lists
                 )
             )
         streams = []
@@ -161,16 +162,9 @@ class Fetch:
         return streams
 
     @staticmethod
-    def stream_info(streamers: list[int]) -> list[dict]:
+    def stream_info(streamers: set[int]) -> list[dict]:
         streams = asyncio.run(Fetch.live(streamers))
-        g_to_cache = {
-            int(gid)
-            for stream in streams
-            if (gid := stream["game_id"]) != ""
-            and not Game.select().where(Game.id == int(gid)).exists()
-        }
-        if g_to_cache:
-            asyncio.run(Db.cache(g_to_cache, mode="games"))
+        asyncio.run(Db.cache({int(stream["game_id"]) for stream in streams}, mode="games"))
         for stream in streams:
             channel: Streamer = Streamer.get(int(stream["user_id"]))
             try:
@@ -194,13 +188,14 @@ class Db:
     @staticmethod
     async def cache(ids: set[int], mode: str) -> None:
         """mode: 'users' or 'games'"""
+        model = Streamer if mode == "users" else Game
+        ids = {i for i in ids if model.get_or_none(i) is None}
         if not ids:
             return None
         print("Caching...")
-        model = Streamer if mode == "users" else Game
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
             data: list[dict] = await asyncio.gather(
-                *(session.get(f"{Helix.endpoint}/{mode}?id={id}") for id in ids)
+                *(session.get(f"{Helix.endpoint}/{mode}?id={i}") for i in ids)
             )
         data = [info[0] for d in data if (info := d.json()["data"])]
         for d in data:
@@ -215,13 +210,10 @@ class Db:
         print("\x1b[1A\x1b[2K\x1b[1A")
 
     @staticmethod
-    def update_follows() -> list[int]:
-        streamers = Streamer.select()
-        past_follows = streamers.where(Streamer.followed == True)
+    def update_follows() -> set[int]:
+        past_follows = {s.id for s in Streamer.select().where(Streamer.followed == True)}
         follows = Fetch.follows(User.get().id)
-        f_to_cache = {f for f in follows if not streamers.where(Streamer.id == f).exists()}
-        if f_to_cache:
-            asyncio.run(Db.cache(f_to_cache, "users"))
+        asyncio.run(Db.cache(follows, "users"))
         streamers = [streamer for streamer in Streamer.select()]
         for streamer in streamers:
             uid = streamer.id
@@ -262,7 +254,7 @@ def authenticate():
         db.create_tables([User, Streamer, Game])
         user = Fetch.user(access_token)
         follows = Fetch.follows(user.get().id)
-        asyncio.run(Db.cache(set(follows), "users"))
+        asyncio.run(Db.cache(follows, "users"))
         Streamer.update(followed=True).execute()
         return redirect("/")
     return template("authenticate.tpl")
@@ -307,28 +299,11 @@ def channel(channel, mode=None, data=None):
 @route("/search")
 def search():
     query = request.query.q
-    mode = request.query.t
-    results = Helix.get(f"search/{mode}?query={query}&first=5")
-    if mode == "categories":
-        asyncio.run(
-            Db.cache(
-                {int(game["id"]) for game in results if not Game.get_or_none(int(game["id"]))},
-                mode="games",
-            )
-        )
-        results = [Game.get(int(game["id"])) for game in results]
-    elif mode == "channels":
-        asyncio.run(
-            Db.cache(
-                {
-                    int(channel["id"])
-                    for channel in results
-                    if Streamer.get_or_none(int(channel["id"])) is None
-                },
-                mode="users",
-            )
-        )
-        results = [Streamer.get(int(channel["id"])) for channel in results]
+    t = request.query.t
+    mode, model, count = ("games", Game, 10) if t == "categories" else ("users", Streamer, 5)
+    ids = {int(result["id"]) for result in Helix.get(f"search/{t}?query={query}&first={count}")}
+    asyncio.run(Db.cache(ids, mode=mode))
+    results = [model.get(i) for i in ids]
     return template("search.tpl", query=query, mode=mode, results=results)
 
 
@@ -340,8 +315,10 @@ def following():
 
 
 @route("/categories/<game>")
-def browse(game):
-    pass
+def browse(game="all"):
+    if game == "all":
+        games = Helix.get("games/top")
+        Db.cache({int(g["id"]) for g in games})
 
 
 @route("/settings")
@@ -420,7 +397,6 @@ def process_data(data: list[dict], mode: str) -> list[dict]:
                 ] = "https://vod-secure.twitch.tv/_404/404_processing_320x180.png"
             vod["created_at"] = time_elapsed(vod["created_at"])
     if mode == "clip":
-        to_cache = set()
         for clip in data:
             clip.setdefault(
                 "box_art_url", "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
@@ -428,12 +404,9 @@ def process_data(data: list[dict], mode: str) -> list[dict]:
             clip.setdefault("game_name", "Streaming")
             clip["time_since"] = time_elapsed(clip["created_at"])
             clip["thumbnail_url"] = clip["thumbnail_url"].rsplit("-", 1)[0] + ".jpg"
-            try:
-                if Game.get_or_none(gid := int(clip["game_id"])) is None:
-                    to_cache.add(gid)
-            except ValueError:
-                pass
-        asyncio.run(Db.cache(to_cache, mode="games"))
+        asyncio.run(
+            Db.cache({int(gid) for clip in data if (gid := clip["game_id"])}, mode="games")
+        )
         for clip in data:
             try:
                 game: Game = Game.get(int(clip["game_id"]))
