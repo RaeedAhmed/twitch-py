@@ -1,7 +1,8 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from platform import system
-from subprocess import PIPE, Popen
+from shlex import split as fmt
+from subprocess import DEVNULL, Popen
 
 import httpx
 import toml
@@ -27,6 +28,7 @@ from peewee import (
 )
 
 db = SqliteDatabase("data.db")
+process: Popen = None  # Python subprocess
 
 
 @hook("before_request")
@@ -153,8 +155,13 @@ class Fetch:
 
     @staticmethod
     def stream_info(streams: list[dict]) -> list[dict]:
-        asyncio.run(Db.cache({int(stream["game_id"]) for stream in streams}, mode="games"))
-        asyncio.run(Db.cache({int(stream["user_id"]) for stream in streams}, mode="users"))
+        async def cache():
+            tasks = []
+            for args in [("game_id", "games"), ("user_id", "users")]:
+                tasks.append(Db.cache({int(stream[args[0]]) for stream in streams}, mode=args[1]))
+            await asyncio.gather(*tasks)
+
+        asyncio.run(cache())
         for stream in streams:
             channel: Streamer = Streamer.get(int(stream["user_id"]))
             try:
@@ -196,7 +203,9 @@ class Db:
         for datum in data:
             datum["id"] = int(datum["id"])
             if mode == "games":
-                datum["box_art_url"] = datum["box_art_url"].replace("-{width}x{height}", "")
+                datum["box_art_url"] = datum["box_art_url"].replace(
+                    "-{width}x{height}", "-285x380"
+                )
             else:
                 for key in Db.key_defaults:
                     if not datum[key]:
@@ -306,10 +315,18 @@ def following():
     return template("following.tpl", follows=follows)
 
 
-@route("/categories/<game>")
-def browse(game="all"):
-    if game == "all":
-        pass
+@route("/categories/<game_id>")
+def browse(game_id="all"):
+    if game_id == "all":
+        return redirect("/top/games")
+    else:
+        try:
+            game: Game = Game.get(int(game_id))
+            streams = Helix.get(f"streams?first=50&game_id={game_id}")
+            data = Fetch.stream_info(streams)
+            return template("top.tpl", data=data, t="channels_filter", game=game)
+        except Exception:
+            abort(code=404, text="Page not found")
 
 
 @route("/top/<t>")
@@ -365,29 +382,20 @@ def time_elapsed(start: str, d="") -> str:
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
     os_ = system()
     c = toml.load("config/settings.toml")[f"{os_}"]
-    if c["multi"] is False:
+    global process
+    if c["multi"] is False and process is not None:
         if os_ == "Linux":
-            pid, e = Popen("pgrep mpv", shell=True, stdout=PIPE).communicate()
-            pid = pid.decode().strip()
-            if pid != "":
-                Popen(f"kill {pid}", shell=True, stdout=PIPE).wait()
-
+            process.terminate()
     if os_ == "Linux":
         if mode == "live":
             print("\x1b[1A\x1b[2K\x1b[1A", f"Launching stream twitch.tv/{channel}", sep="\n")
-            Popen(
-                f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
-                    --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best',
-                shell=True,
-                close_fds=True,
-            )
+            command = f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
+                    --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best'
+            process = Popen(fmt(command), stdout=DEVNULL)
         else:
             print("\x1b[1A\x1b[2K\x1b[1A", f"Launching video: {url}", sep="\n")
-            Popen(
-                f'{c["app"]} {c["args"]} --really-quiet {url}',
-                shell=True,
-                close_fds=True,
-            )
+            command = f'{c["app"]} {c["args"]} --really-quiet {url}'
+            process = Popen(fmt(command), stdout=DEVNULL)
 
 
 def process_data(data: list[dict], mode: str) -> list[dict]:
