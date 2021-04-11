@@ -7,7 +7,7 @@
 </header>
 <section>
     <form action="" method="get" id="follow">
-        <button name="follow" value="toggle">{{"Unfollow" if channel.followed else "Follow"}}</button>
+        <button name="follow" value="{{'Unfollow' if channel.followed else 'Follow'}}">{{"Unfollow" if channel.followed else "Follow"}}</button>
     </form>
     <form action="" method="get" id="vod">
         <button name="vod" value="archive">View Vods</button>
@@ -22,35 +22,35 @@
 </section>
 <main>
     % if mode == "vod":
-    <h3>Past Broadcasts:</h3>
-    % for vod in data:
-    <article>
-        <p>{{vod["title"]}}</p>
-        <div class="thumbnail">
-            <a href="?video={{vod['url']}}"><img src="{{vod['thumbnail_url']}}" alt="" loading="lazy" width=100% height=100%></a>
-            <b class="tr">📅 {{vod['created_at']}}</b>
-            <b class="bl">⏱️ {{vod["duration"]}}</b>
-            <b class="br">{{vod['view_count']}} views</b>
-        </div>
-    </article>
-    % end
+        <h3>Past Broadcasts:</h3>
+        % for vod in data:
+        <article>
+            <p>{{vod["title"]}}</p>
+            <div class="thumbnail">
+                <a href="?video={{vod['url']}}"><img src="{{vod['thumbnail_url']}}" alt="" loading="lazy" width=100% height=100%></a>
+                <b class="tr">📅 {{vod['created_at']}}</b>
+                <b class="bl">⏱️ {{vod["duration"]}}</b>
+                <b class="br">{{vod['view_count']}} views</b>
+            </div>
+        </article>
+        % end
     % end
     % if mode == "clip":
-    % for clip in data:
-    <article>
-        <p>{{clip['title']}}</p>
-        <div class="thumbnail">
-            <a href="?video={{clip['url']}}"><img src="{{clip['thumbnail_url']}}" alt="" width="100%" height="100%" loading="lazy"></a>
-            <b class="tr">📅 {{clip['time_since']}}</b>
-            <b class="br">{{clip['view_count']}} views</b>
-        </div>
-        <p><img src="{{clip['box_art_url']}}" alt="" width="50" loading="lazy">{{clip['game_name']}}</p>
-        % if clip['vod_link']:
-        <form action="" method="get" id="video">
-            <button name="video" value="{{clip['vod_link']}}" form="video">View VOD</button>
-        </form>
+        % for clip in data:
+            <article>
+                <p>{{clip['title']}}</p>
+                <div class="thumbnail">
+                    <a href="?video={{clip['url']}}"><img src="{{clip['thumbnail_url']}}" alt="" width="100%" height="100%" loading="lazy"></a>
+                    <b class="tr">📅 {{clip['time_since']}}</b>
+                    <b class="br">{{clip['view_count']}} views</b>
+                </div>
+                <p><a href="/categories/{{game_id}}"><img src="{{clip['box_art_url']}}" alt="" width="50" loading="lazy"></a>{{clip['game_name']}}</p>
+                % if clip['vod_link']:
+                <form action="" method="get" id="video">
+                    <button name="video" value="{{clip['vod_link']}}" form="video">View VOD</button>
+                </form>
+                % end
+            </article>
         % end
-    </article>
-    % end
     % end
 </main>
