@@ -26,7 +26,6 @@ from peewee import (
     TextField,
 )
 
-"""Database connection management"""
 db = SqliteDatabase("data.db")
 
 
@@ -39,9 +38,6 @@ def _connect_db():
 def _close_db():
     if not db.is_closed():
         db.close()
-
-
-"""Peewee Sqlite data models"""
 
 
 class BaseModel(Model):
@@ -72,9 +68,6 @@ class Game(BaseModel):
     id = IntegerField(primary_key=True)
     name = TextField()
     box_art_url = TextField()
-
-
-"""Helix API information and request functions"""
 
 
 class Helix:
@@ -121,9 +114,6 @@ class Helix:
         return results
 
 
-"""class of functions pertaining to requesting data from Helix API"""
-
-
 class Fetch:
     @staticmethod
     def user(access_token: str) -> User:
@@ -162,9 +152,9 @@ class Fetch:
         return streams
 
     @staticmethod
-    def stream_info(streamers: set[int]) -> list[dict]:
-        streams = asyncio.run(Fetch.live(streamers))
+    def stream_info(streams: list[dict]) -> list[dict]:
         asyncio.run(Db.cache({int(stream["game_id"]) for stream in streams}, mode="games"))
+        asyncio.run(Db.cache({int(stream["user_id"]) for stream in streams}, mode="users"))
         for stream in streams:
             channel: Streamer = Streamer.get(int(stream["user_id"]))
             try:
@@ -179,9 +169,6 @@ class Fetch:
         return streams
 
 
-"""Class of functions pertaining to database caching"""
-
-
 class Db:
     key_defaults = ["broadcaster_type", "description", "offline_image_url"]
 
@@ -189,24 +176,32 @@ class Db:
     async def cache(ids: set[int], mode: str) -> None:
         """mode: 'users' or 'games'"""
         model = Streamer if mode == "users" else Game
-        ids = {i for i in ids if model.get_or_none(i) is None}
-        if not ids:
+        tmp = [i for i in ids if model.get_or_none(i) is None]
+        if not tmp:
             return None
+        id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]
         print("Caching...")
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
-            data: list[dict] = await asyncio.gather(
-                *(session.get(f"{Helix.endpoint}/{mode}?id={i}") for i in ids)
+            resps: list[Response] = await asyncio.gather(
+                *(
+                    session.get(f"{Helix.endpoint}/{mode}?{'&'.join([f'id={i}' for i in i_list])}")
+                    for i_list in id_lists
+                )
             )
-        data = [info[0] for d in data if (info := d.json()["data"])]
-        for d in data:
-            d["id"] = int(d["id"])
+        data = []
+        for resp in resps:
+            datum: list[dict] = resp.json()["data"]
+            if datum:
+                data += datum
+        for datum in data:
+            datum["id"] = int(datum["id"])
             if mode == "games":
-                d["box_art_url"] = d["box_art_url"].replace("-{width}x{height}", "")
+                datum["box_art_url"] = datum["box_art_url"].replace("-{width}x{height}", "")
             else:
                 for key in Db.key_defaults:
-                    if not d[key]:
-                        d.pop(key)
-            model.create(**d)
+                    if not datum[key]:
+                        datum.pop(key)
+            model.create(**datum)
         print("\x1b[1A\x1b[2K\x1b[1A")
 
     @staticmethod
@@ -235,14 +230,11 @@ class Db:
         Streamer.update(followed=not channel.followed).where(Streamer.id == channel.id).execute()
 
 
-"""Application Routes"""
-
-
 @route("/")
 def index():
     if db.table_exists("user"):
         follows = Db.update_follows()
-        streams = Fetch.stream_info(follows)
+        streams = Fetch.stream_info(asyncio.run(Fetch.live(follows)))
         return template("index.tpl", User=User.get(), streams=streams)
     else:
         return redirect(Helix.oauth)
@@ -303,7 +295,7 @@ def search():
     mode, model, count = ("games", Game, 10) if t == "categories" else ("users", Streamer, 5)
     ids = {int(result["id"]) for result in Helix.get(f"search/{t}?query={query}&first={count}")}
     asyncio.run(Db.cache(ids, mode=mode))
-    results = [model.get(i) for i in ids]
+    results = model.select().where(model.id.in_(ids))
     return template("search.tpl", query=query, mode=mode, results=results)
 
 
@@ -317,8 +309,22 @@ def following():
 @route("/categories/<game>")
 def browse(game="all"):
     if game == "all":
-        games = Helix.get("games/top")
-        Db.cache({int(g["id"]) for g in games})
+        pass
+
+
+@route("/top/<t>")
+def top(t):
+    if t == "channels":
+        top_streams = Helix.get("streams?first=50")
+        data = Fetch.stream_info(top_streams)
+    elif t == "games":
+        games = [int(g["id"]) for g in Helix.get("games/top?first=100")]
+        asyncio.run(Db.cache(set(games), mode="games"))
+        data = list(Game.select().where(Game.id.in_(games)))
+        data.sort(key=lambda x: games.index(x.id))
+    else:
+        abort(code=404, text="Page not found")
+    return template("top.tpl", data=data, t=t)
 
 
 @route("/settings")
@@ -343,9 +349,6 @@ def error404(error):
         """<p>Page does not exist.</p><p>For developer: {{error}}</p>""",
         error=error,
     )
-
-
-"""Miscellaneous utils"""
 
 
 def time_elapsed(start: str, d="") -> str:
