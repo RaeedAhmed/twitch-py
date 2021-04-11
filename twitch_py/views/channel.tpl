@@ -39,13 +39,16 @@
     % for clip in data:
     <article>
         <p>{{clip['title']}}</p>
-        <form action="" method="get" id="video">
-            <button name="video" value="{{clip['url']}}"><img src="{{clip['thumbnail_url']}}" alt="" width="180" loading="lazy"></button>
-        </form>
+        <div class="thumbnail">
+            <a href="?video={{clip['url']}}"><img src="{{clip['thumbnail_url']}}" alt="" width="100%" height="100%" loading="lazy"></a>
+            <b class="tr">📅 {{clip['time_since']}}</b>
+            <b class="br">{{clip['view_count']}} views</b>
+        </div>
         <p><img src="{{clip['box_art_url']}}" alt="" width="50" loading="lazy">{{clip['game_name']}}</p>
-        <p>{{clip['time_since']}} ago, {{clip['view_count']}} views</p>
         % if clip['vod_link']:
-        <button name="video" value="{{clip['vod_link']}}" form="video">View VOD</button>
+        <form action="" method="get" id="video">
+            <button name="video" value="{{clip['vod_link']}}" form="video">View VOD</button>
+        </form>
         % end
     </article>
     % end
