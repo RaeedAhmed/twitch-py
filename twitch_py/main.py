@@ -158,7 +158,8 @@ class Fetch:
         async def cache():
             tasks = []
             for args in [("game_id", "games"), ("user_id", "users")]:
-                tasks.append(Db.cache({int(stream[args[0]]) for stream in streams}, mode=args[1]))
+                ids = {int(i) for stream in streams if (i := stream[args[0]])}
+                tasks.append(Db.cache(ids, mode=args[1]))
             await asyncio.gather(*tasks)
 
         asyncio.run(cache())
