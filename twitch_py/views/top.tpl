@@ -24,8 +24,14 @@
         <p>{{stream['title']}}</p>
         <div class="thumbnail">
             <a href="/{{stream['user_login']}}?watch=live"><img src="{{stream['thumbnail_url']}}" alt="{{stream['title']}}" width=100% height=100% loading="lazy"></a>
-            <b class="bl">⏱️{{stream['uptime']}}</b>
-            <b class="br">🔴 {{stream['viewer_count']}}</b>
+            <div class="bl">
+                <i class="gg-timer"></i>
+                <b>{{stream['uptime']}}</b>
+            </div>
+            <div class="br">
+                <i class="gg-user"></i>
+                <b> {{stream['viewer_count']}}</b>
+            </div>
         </div>
         % if t == "channels":
         <p><a href="/categories/{{stream['game_id']}}"><img src="{{stream['box_art_url']}}" alt="{{stream['game_name']}}" width = 50 loading="lazy"></a>  {{stream['game_name']}}</p>

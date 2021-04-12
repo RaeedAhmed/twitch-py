@@ -1,7 +1,16 @@
-body {
-    background-color: #0e0e10;
-    color: whitesmoke;
+:root {
     font-family: Consolas, monaco, monospace;
+    --font: Consolas, monaco, monospace;
+    color: #f2f3f4;
+    --text-color: #f2f3f4;
+    background-color: #0e0e10;
+    --bg-color: #0e0e10;
+}
+
+html {
+    scrollbar-gutter: stable force;
+    scrollbar-width: thin;
+    scrollbar-color: dimgrey black;
 }
 
 header {
@@ -10,8 +19,78 @@ header {
 
 nav ul {
     display: flex;
-    gap: 20px;
     list-style: none;
+    margin-bottom: 0;
+}
+
+a.nav {
+    text-align: center;
+    outline: none;
+    text-decoration: none;
+    color: inherit;
+    border-left: transparent solid 20px;
+}
+
+a.nav:hover {
+    text-decoration: underline 1px var(--text-color);
+}
+
+i {
+    color: inherit;
+}
+
+.radio-toolbar input[type="radio"] {
+    opacity: 0;
+    position: fixed;
+    width: 0;
+}
+
+.radio-toolbar label {
+    padding: 10px 20px;
+    font-family: inherit;
+    border: solid 2px transparent;
+}
+
+.radio-toolbar label:hover {
+    border: var(--text-color) 2px dotted;
+}
+
+.radio-toolbar input[type="radio"]:checked+label {
+    border: var(--text-color) 1px solid;
+    margin: 1px;
+}
+
+input[type="search"] {
+    background-color: transparent;
+    color: inherit;
+    border: none;
+    border-bottom: var(--text-color) 1px double;
+    font-family: inherit;
+    padding: 5px;
+}
+
+input[type="search"]:focus {
+    outline: none
+}
+
+.search {
+    margin-left: auto;
+}
+
+button {
+    background-color: transparent;
+    font-family: inherit;
+    color: inherit;
+    border: 1px solid var(--text-color);
+}
+
+button:hover {
+    background-color: var(--text-color);
+    color: var(--bg-color);
+}
+
+nav button {
+    border: none;
 }
 
 .thumbnail {
@@ -19,59 +98,55 @@ nav ul {
     height: 270px;
     display: block;
     position: relative;
-    color: white;
+    color: inherit;
     text-align: center;
 }
 
 .bl {
-    position: absolute;
     bottom: 0px;
     left: 0px;
-    background-color: rgba(0, 0, 0, 0.6);
-    padding: 5px;
 }
 
 .br {
-    position: absolute;
     bottom: 0px;
     right: 0px;
-    background-color: rgba(0, 0, 0, 0.6);
-    padding: 5px;
 }
 
 .tr {
-    position: absolute;
     top: 0px;
     right: 0px;
-    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.bl, .br, .tr {
+    display: inline-flex;
+    position: absolute;
     padding: 5px;
+    background-color: rgba(0, 0, 0, 0.6);
 }
 
-a.nav {
-    text-align: center;
-    outline: none;
-    text-decoration: none;
-    color: whitesmoke;
-}
-
-a.nav:hover {
-    text-decoration: underline 1px whitesmoke;
-}
-
-.search {
-    margin-left: auto;
+.br b, .tr b, .bl b {
+    padding-left: 5px;
 }
 
 button[value="Unfollow"] {
-    background-color: tomato;
-    color: whitesmoke;
+    color: #ff496c;
+    border-color: #ff496c;
+}
+
+button[value="Unfollow"]:hover {
+    background-color: #ff496c;
+    color: var(--bg-color);
 }
 
 button[value="Follow"] {
-    background-color: lightgreen;
-    color: whitesmoke;
+    color: #90ee90;
+    border-color: #90ee90;
 }
 
+button[value="Follow"]:hover {
+    background-color: #90ee90;
+    color: var(--bg-color);
+}
 section#follow {
     display: grid;
     grid-gap: 20px;
@@ -84,4 +159,8 @@ main#top_games {
     grid-gap: 20px;
     grid-auto-rows: 150px;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.gg-user {
+    color: #ff496c;
 }
