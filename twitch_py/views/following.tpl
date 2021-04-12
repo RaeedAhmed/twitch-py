@@ -3,6 +3,7 @@
     <h1>Following {{len(follows)}} streamers</h1>
 </header>
 <input type="text" id="nameFilter" onkeyup="filterFunction()" placeholder="Filter by name...">
+<p></p>
 <section id="follow">
     % for follow in follows:
     <article>

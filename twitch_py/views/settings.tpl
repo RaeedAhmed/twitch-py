@@ -8,5 +8,5 @@
         </tr>
         % end
     </table>
-    <a href="?open=true">Open Settings</a>
+    <form action="" method="get" id="open"><button name="open" value="true" type="submit">Open Settings</button></form>
 </main>

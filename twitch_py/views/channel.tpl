@@ -1,8 +1,9 @@
 % rebase('base.tpl', title=channel.display_name)
 <header>
     <h1><img src="{{channel.profile_image_url}}" alt="{{channel.login}}" width="75" loading="lazy">{{channel.display_name}}</h1>
-    <div>{{channel.broadcaster_type}}</div>
+    <p broadcaster-type="{{channel.broadcaster_type}}"></p>
     <div>{{channel.description}}</div>
+    <p></p>
     <form action="https://www.twitch.tv/popout/{{channel.login}}/chat" target="_blank"><button>Chat</button></form>
 </header>
 <section>
@@ -29,7 +30,7 @@
             <div class="thumbnail">
                 <a href="?video={{vod['url']}}"><img src="{{vod['thumbnail_url']}}" alt="" loading="lazy" width=100% height=100%></a>
                 <div class="tr">
-                    <i class="gg-calendar"></i>
+                    <i class="gg-calendar-dates"></i>
                     <b>{{vod['created_at']}}</b>
                 </div>
                 <div class="bl">
@@ -51,7 +52,7 @@
                 <div class="thumbnail">
                     <a href="?video={{clip['url']}}"><img src="{{clip['thumbnail_url']}}" alt="" width="100%" height="100%" loading="lazy"></a>
                     <div class="tr">
-                        <i class="gg-calendar"></i>
+                        <i class="gg-calendar-dates"></i>
                         <b>{{clip['time_since']}}</b>
                     </div>
                     <div class="br">

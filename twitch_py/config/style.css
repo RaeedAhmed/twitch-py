@@ -23,10 +23,13 @@ nav ul {
     margin-bottom: 0;
 }
 
+a {
+    text-decoration: none;
+}
+
 a.nav {
     text-align: center;
     outline: none;
-    text-decoration: none;
     color: inherit;
     border-left: transparent solid 20px;
 }
@@ -52,7 +55,8 @@ i {
 }
 
 .radio-toolbar label:hover {
-    border: var(--text-color) 2px dotted;
+    background-color: var(--text-color);
+    color: var(--bg-color);
 }
 
 .radio-toolbar input[type="radio"]:checked+label {
@@ -60,7 +64,7 @@ i {
     margin: 1px;
 }
 
-input[type="search"] {
+input[type="search"], input[type="text"] {
     background-color: transparent;
     color: inherit;
     border: none;
@@ -69,12 +73,23 @@ input[type="search"] {
     padding: 5px;
 }
 
-input[type="search"]:focus {
+input[type="search"]:focus, input[type="text"]:focus {
     outline: none
 }
 
 .search {
     margin-left: auto;
+}
+
+input[type="date"] {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: inherit;
+}
+
+input[type="date"]:hover, input[type="date"]:focus {
+    color: var(--bg-color);
+    background-color: var(--text-color);
 }
 
 button {
@@ -147,6 +162,7 @@ button[value="Follow"]:hover {
     background-color: #90ee90;
     color: var(--bg-color);
 }
+
 section#follow {
     display: grid;
     grid-gap: 20px;
@@ -163,4 +179,14 @@ main#top_games {
 
 .gg-user {
     color: #ff496c;
+}
+
+p[broadcaster-type="partner"]::after {
+    color: magenta;
+    content: attr(broadcaster-type);
+}
+
+p[broadcaster-type="affiliate"]::after {
+    color: mediumpurple;
+    content: attr(broadcaster-type);
 }
