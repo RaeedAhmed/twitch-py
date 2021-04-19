@@ -1,0 +1,24 @@
+#!/bin/bash
+CONFDIR=$HOME/.config/twitch-py
+EXEC=/usr/local/bin/twitch-py
+
+if [ -f "$EXEC" ]; then
+    echo "[1] Removing past installation..."
+    sudo rm $EXEC
+else
+    echo "[1] No past installation..."
+fi
+
+if [ -d "$CONFDIR" ]; then
+    rm -r $CONFDIR
+fi
+
+echo "[2] Setting up static files..."
+mkdir $CONFDIR
+
+cp -R twitch_py/config $CONFDIR
+cp -R twitch_py/views $CONFDIR
+
+echo "[3] Downloading binary"
+sudo wget -q --show-progress -O $EXEC https://github.com/RaeedAhmed/twitch-py/releases/latest/download/main.bin
+sudo chmod +x $EXEC
