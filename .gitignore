@@ -140,4 +140,6 @@ cython_debug/
 twitch_py/data.db
 poetry.lock
 .flake8
-
+noxfile.py
+wget-log*
+main.bin

@@ -1,12 +1,14 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from platform import system
-from shlex import split as fmt
+from shlex import split as lex
 from subprocess import DEVNULL, Popen
 
 import httpx
 import toml
 from bottle import (
+    TEMPLATE_PATH,
     abort,
     error,
     hook,
@@ -27,8 +29,11 @@ from peewee import (
     TextField,
 )
 
-db = SqliteDatabase("data.db")
+confdir = str(Path.home() / ".config/twitch-py")
+TEMPLATE_PATH.insert(0, f"{confdir}/views")
+db = SqliteDatabase(f"{confdir}/data.db")
 process: Popen = None  # Python subprocess
+os_ = system().lower()
 
 
 @hook("before_request")
@@ -347,18 +352,17 @@ def top(t):
 
 @route("/settings")
 def settings():
-    os_ = system()
     if request.query.get("open"):
-        if os_ == "Linux":
-            Popen("open config/settings.toml", shell=True, close_fds=True)
+        if os_.startswith("linux"):
+            Popen(f"open {confdir}/config/settings.toml", shell=True, close_fds=True)
             return redirect("/settings")
-    config = toml.load("config/settings.toml")[f"{os_}"]
+    config = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
     return template("settings.tpl", config=config)
 
 
 @route("/config/<filename:path>")
 def send_static(filename):
-    return static_file(filename, root="config/")
+    return static_file(filename, root=f"{confdir}/config/")
 
 
 @error(404)
@@ -381,22 +385,21 @@ def time_elapsed(start: str, d="") -> str:
 
 
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
-    os_ = system()
-    c = toml.load("config/settings.toml")[f"{os_}"]
+    c = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
     global process
     if c["multi"] is False and process is not None:
-        if os_ == "Linux":
+        if os_.startswith("linux"):
             process.terminate()
-    if os_ == "Linux":
+    if os_.startswith("linux"):
         if mode == "live":
             print("\x1b[1A\x1b[2K\x1b[1A", f"Launching stream twitch.tv/{channel}", sep="\n")
             command = f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
                     --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best'
-            process = Popen(fmt(command), stdout=DEVNULL)
+            process = Popen(lex(command), stdout=DEVNULL)
         else:
             print("\x1b[1A\x1b[2K\x1b[1A", f"Launching video: {url}", sep="\n")
             command = f'{c["app"]} {c["args"]} --really-quiet {url}'
-            process = Popen(fmt(command), stdout=DEVNULL)
+            process = Popen(lex(command), stdout=DEVNULL)
 
 
 def process_data(data: list[dict], mode: str) -> list[dict]:
