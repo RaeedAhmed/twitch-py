@@ -2,29 +2,71 @@
 CONFDIR=$HOME/.config/twitch-py
 EXEC=/usr/local/bin/twitch-py
 BIN=https://github.com/RaeedAhmed/twitch-py/releases/latest/download/twitch-py.bin
-echo "Setting up static files..."
+
+rmConf() {
 if [ -d "$CONFDIR" ]; then
+    echo "Removing config files..."
     rm -r $CONFDIR
+else
+    echo "No config files found..."
 fi
-mkdir $CONFDIR
-cp -R twitch-py/config $CONFDIR
-cp -R twitch-py/views $CONFDIR
+}
 
-while getopts p option
-do
-    case "${option}"
-    in
-    p) exit 1
-    esac
-done
-
+rmExec() {
 if [ -f "$EXEC" ]; then
     echo "Removing past installation..."
     sudo rm $EXEC
 else
     echo "No past installation..."
 fi
+}
 
-echo "[3] Downloading binary"
+setupConf() {
+rmConf
+echo "Setting up static files..."
+mkdir $CONFDIR
+cp -R twitch_py/config $CONFDIR
+cp -R twitch_py/views $CONFDIR
+}
+
+compile() {
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    pyinstaller twitch_py/main.py --name twitch-py --onefile
+    sudo mv dist/twitch-py $EXEC
+    deactivate
+    exit 1
+}
+
+uninstall() {
+rmConf
+rmExec
+}
+
+dlBin() {
+echo "Downloading binary"
 sudo wget -q --show-progress -O $EXEC $BIN || sudo curl -sL $BIN | sudo tee $EXEC >/dev/null
 sudo chmod +x $EXEC
+}
+
+while getopts cpu option
+do
+    case "${option}"
+    in
+    c) setupConf; compile; exit 1
+    ;;
+    p) setupConf; exit 1
+    ;;
+    u) uninstall; exit 1
+    ;;
+    esac
+done
+
+# No flags
+setupConf
+rmExec
+dlBin
+
+
+
