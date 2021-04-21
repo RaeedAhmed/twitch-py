@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "twitch-py"
+name = "twitch_py"
 version = "0.1.0"
 description = "Frontend for launching Twitch streams/vods from user account preferences"
 authors = ["RaeedAhmed <ruahmed7868@gmail.com>"]
@@ -15,14 +15,13 @@ peewee = "^3.14.4"
 toml = "^0.10.2"
 waitress = "^2.0.0"
 streamlink = "^2.1.1"
+pyinstaller = "^4.3"
 
 [tool.poetry.dev-dependencies]
 black = "^20.8b1"
 flake8 = "^3.9.0"
 isort = "^5.8.0"
 ipython = "^7.21.0"
-nox = "^2020.12.31"
-pyinstaller = "^4.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
