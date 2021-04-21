@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from platform import system
@@ -9,8 +10,6 @@ import httpx
 import toml
 from bottle import (
     TEMPLATE_PATH,
-    abort,
-    error,
     hook,
     redirect,
     request,
@@ -19,7 +18,7 @@ from bottle import (
     static_file,
     template,
 )
-from httpx import Response
+from httpx import HTTPError, Response, TimeoutException, AsyncClient
 from peewee import (
     BooleanField,
     DoesNotExist,
@@ -32,8 +31,41 @@ from peewee import (
 confdir = str(Path.home() / ".config/twitch-py")
 TEMPLATE_PATH.insert(0, f"{confdir}/views")
 db = SqliteDatabase(f"{confdir}/data.db")
-process: Popen = None  # Python subprocess
 os_ = system().lower()
+
+
+class App:
+    process: Popen = None  # Python subprocess
+    logo = "\n".join(
+        line.center(80)
+        for line in """
+ _            _ _       _                       
+| |___      _(_) |_ ___| |__        _ __  _   _ 
+| __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |
+| |_ \ V  V /| | || (__| | | |_____| |_) | |_| |
+ \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |
+                                   |_|    |___/ 
+    """.splitlines()
+    )
+    url = "http://localhost:8080/".center(80)
+    messages = []
+    count = 1
+
+    @classmethod
+    def redirect(cls, error: str):
+        setattr(cls, "error", error)
+        return redirect("/error")
+
+    @staticmethod
+    def display(message: str = ""):
+        os.system("cls" if os.name == "nt" else "clear")
+        print(App.logo, App.url)
+        if len(m := App.messages) > 9:
+            m.pop(0)
+            App.count += 1
+        m.append(message)
+        for i, msg in enumerate(m, start=App.count):
+            print(f"[{i}]".center(5) + f"> {msg}")
 
 
 @hook("before_request")
@@ -94,9 +126,14 @@ class Helix:
 
     @staticmethod
     def get(params: str):
-        with httpx.Client(headers=Helix.headers()) as session:
-            resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()["data"]
-        return resp
+        try:
+            with httpx.Client(headers=Helix.headers()) as session:
+                resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()["data"]
+            return resp
+        except TimeoutException:
+            App.display("Connection timed out. Please try again")
+        except HTTPError:
+            App.display(f"Error in handling request with params {params}")
 
     @staticmethod
     def get_iter(params: str) -> list[dict]:
@@ -107,7 +144,7 @@ class Helix:
                 try:
                     data: list[dict] = resp["data"]
                 except Exception:
-                    print(f"Error with {resp}")
+                    App.display(f"Error with {resp}")
                 if data == []:
                     break
                 results += data
@@ -123,7 +160,7 @@ class Helix:
 
 class Fetch:
     @staticmethod
-    def user(access_token: str) -> User:
+    def user(access_token: str) -> None:
         headers = {
             "Client-ID": Helix.client_id,
             "Authorization": f"Bearer {access_token}",
@@ -131,7 +168,7 @@ class Fetch:
         user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
         user["access_token"] = access_token
         user["id"] = int(user["id"])
-        return User.create(**user)
+        User.create(**user)
 
     @staticmethod
     def follows(id: int) -> set[int]:
@@ -193,7 +230,6 @@ class Db:
         if not tmp:
             return None
         id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]
-        print("Caching...")
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
             resps: list[Response] = await asyncio.gather(
                 *(
@@ -217,37 +253,49 @@ class Db:
                     if not datum[key]:
                         datum.pop(key)
             model.create(**datum)
-        print("\x1b[1A\x1b[2K\x1b[1A")
 
     @staticmethod
     def update_follows() -> set[int]:
-        past_follows = {s.id for s in Streamer.select().where(Streamer.followed == True)}
         follows = Fetch.follows(User.get().id)
         asyncio.run(Db.cache(follows, "users"))
-        streamers = [streamer for streamer in Streamer.select()]
+        streamers: list[Streamer] = [streamer for streamer in Streamer.select()]
+        to_toggle = set()
         for streamer in streamers:
-            uid = streamer.id
-            if uid not in (past_follows and follows) or uid in (past_follows and follows):
-                pass
-            else:
-                Db.toggle_follow(streamer)
+            sid = streamer.id
+            if (sid in follows and streamer.followed is not True) or (
+                sid not in follows and streamer.followed is True
+            ):
+                to_toggle.add(streamer)
+        if to_toggle:
+            asyncio.run(Db.toggle_follow(to_toggle))
         return follows
 
     @staticmethod
-    def toggle_follow(channel: Streamer) -> None:
-        data = {"to_id": str(channel.id), "from_id": str(User.get().id)}
-        with httpx.Client(headers=Helix.headers(), params=data) as session:
-            url = f"{Helix.endpoint}/users/follows"
-            if channel.followed is True:
-                session.delete(url)
+    async def toggle_follow(streamers: set[Streamer]) -> None:
+        url = f"{Helix.endpoint}/users/follows"
+
+        async def send(session: AsyncClient, data: dict, streamer: Streamer):
+            Streamer.update(followed=not streamer.followed).where(
+                Streamer.id == streamer.id
+            ).execute()
+            if streamer.followed is True:
+                App.display(f"Unfollowing {streamer.display_name}")
+                await session.delete(url, params=data)
             else:
-                session.post(url)
-        Streamer.update(followed=not channel.followed).where(Streamer.id == channel.id).execute()
+                App.display(f"Following {streamer.display_name}")
+                await session.post(url, params=data)
+
+        async with httpx.AsyncClient(headers=Helix.headers()) as session:
+            tasks = []
+            for streamer in streamers:
+                data = {"to_id": str(streamer.id), "from_id": str(User.get().id)}
+                tasks.append(send(session, data, streamer))
+            await asyncio.gather(*tasks)
 
 
 @route("/")
 def index():
-    if db.table_exists("user"):
+    if db.table_exists("user") and User.get_or_none() is not None:
         follows = Db.update_follows()
         streams = Fetch.stream_info(asyncio.run(Fetch.live(follows)))
         return template("index.tpl", User=User.get(), streams=streams)
@@ -259,10 +307,7 @@ def index():
 def authenticate():
     if access_token := request.query.get("access_token"):
         db.create_tables([User, Streamer, Game])
-        user = Fetch.user(access_token)
-        follows = Fetch.follows(user.get().id)
-        asyncio.run(Db.cache(follows, "users"))
-        Streamer.update(followed=True).execute()
+        Fetch.user(access_token)
         return redirect("/")
     return template("authenticate.tpl")
 
@@ -274,10 +319,10 @@ def channel(channel, mode=None, data=None):
             (Streamer.display_name == channel) | (Streamer.login == channel)
         )
     except DoesNotExist:
-        abort(code=404, text="Page not found")
+        App.redirect("Page not found")
     date = {"start": "", "end": ""}
     if request.query.get("follow"):
-        Db.toggle_follow(channel)
+        asyncio.run(Db.toggle_follow({channel}))
         redirect(f"/{channel.login}")
     elif request.query.get("watch"):
         watch_video(channel.login)
@@ -332,7 +377,7 @@ def browse(game_id="all"):
             data = Fetch.stream_info(streams)
             return template("top.tpl", data=data, t="channels_filter", game=game)
         except Exception:
-            abort(code=404, text="Page not found")
+            App.redirect("Page not found")
 
 
 @route("/top/<t>")
@@ -346,7 +391,7 @@ def top(t):
         data = list(Game.select().where(Game.id.in_(games)))
         data.sort(key=lambda x: games.index(x.id))
     else:
-        abort(code=404, text="Page not found")
+        App.redirect("Page not found")
     return template("top.tpl", data=data, t=t)
 
 
@@ -365,12 +410,9 @@ def send_static(filename):
     return static_file(filename, root=f"{confdir}/config/")
 
 
-@error(404)
-def error404(error):
-    return template(
-        """<p>Page does not exist.</p><p>For developer: {{error}}</p>""",
-        error=error,
-    )
+@route("/error")
+def error_page():
+    return template("error_page.tpl", error=App.error)
 
 
 def time_elapsed(start: str, d="") -> str:
@@ -386,20 +428,19 @@ def time_elapsed(start: str, d="") -> str:
 
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
     c = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
-    global process
-    if c["multi"] is False and process is not None:
+    if c["multi"] is False and App.process is not None:
         if os_.startswith("linux"):
-            process.terminate()
+            App.process.terminate()
     if os_.startswith("linux"):
         if mode == "live":
-            print("\x1b[1A\x1b[2K\x1b[1A", f"Launching stream twitch.tv/{channel}", sep="\n")
+            App.display(f"Launching stream twitch.tv/{channel}")
             command = f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
                     --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best'
-            process = Popen(lex(command), stdout=DEVNULL)
+            App.process = Popen(lex(command), stdout=DEVNULL)
         else:
-            print("\x1b[1A\x1b[2K\x1b[1A", f"Launching video: {url}", sep="\n")
+            App.display(f"Launching video: {url}")
             command = f'{c["app"]} {c["args"]} --really-quiet {url}'
-            process = Popen(lex(command), stdout=DEVNULL)
+            App.process = Popen(lex(command), stdout=DEVNULL)
 
 
 def process_data(data: list[dict], mode: str) -> list[dict]:
@@ -467,4 +508,10 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
 
 
 if __name__ == "__main__":
-    run(server="waitress", host="localhost", port=8080)
+    App.display("Launching server...")
+    try:
+        run(server="waitress", host="localhost", port=8080, quiet=True)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        App.display("Exiting...")
