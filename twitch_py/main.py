@@ -160,7 +160,7 @@ class Helix:
 
 class Fetch:
     @staticmethod
-    def user(access_token: str) -> None:
+    def user(access_token: str) -> User:
         headers = {
             "Client-ID": Helix.client_id,
             "Authorization": f"Bearer {access_token}",
@@ -168,7 +168,7 @@ class Fetch:
         user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
         user["access_token"] = access_token
         user["id"] = int(user["id"])
-        User.create(**user)
+        return User.create(**user)
 
     @staticmethod
     def follows(id: int) -> set[int]:
@@ -307,7 +307,10 @@ def index():
 def authenticate():
     if access_token := request.query.get("access_token"):
         db.create_tables([User, Streamer, Game])
-        Fetch.user(access_token)
+        user = Fetch.user(access_token)
+        follows = Fetch.follows(user.get().id)
+        asyncio.run(Db.cache(follows, "users"))
+        Streamer.update(followed=True).execute()
         return redirect("/")
     return template("authenticate.tpl")
 
