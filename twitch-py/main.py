@@ -18,7 +18,7 @@ from bottle import (
     static_file,
     template,
 )
-from httpx import HTTPError, Response, TimeoutException, AsyncClient
+from httpx import AsyncClient, HTTPError, Response, TimeoutException
 from peewee import (
     BooleanField,
     DoesNotExist,

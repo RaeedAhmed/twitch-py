@@ -28,8 +28,8 @@ source .venv/bin/activate
 Installing dependencies and running:
 ```bash
 pip install .
-cd twitch_py/
-python main.py
+./install -p # -p to setup config files only
+python twitch-py/main.py
 ```
 
 ## Usage
