@@ -1,11 +1,10 @@
 import asyncio
-import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from platform import system
 from shlex import split as lex
 from subprocess import DEVNULL, Popen
+from subprocess import run as cli
 
 import httpx
 import toml
@@ -19,7 +18,7 @@ from bottle import (
     static_file,
     template,
 )
-from httpx import AsyncClient, HTTPError, Response, TimeoutException
+from httpx import AsyncClient, HTTPError, Response
 from peewee import (
     BooleanField,
     DoesNotExist,
@@ -33,7 +32,7 @@ from peewee import (
 confdir = str(Path.home() / ".config/twitch-py")
 TEMPLATE_PATH.insert(0, f"{confdir}/views")
 db = SqliteDatabase(f"{confdir}/data.db")
-os_ = system().lower()
+os_ = sys.platform.lower()  # 'linux_', 'darwin_', 'win_"
 
 
 class App:
@@ -54,13 +53,13 @@ class App:
     count = 1
 
     @classmethod
-    def redirect(cls, error: str):
-        setattr(cls, "error", error)
+    def redirect_err(cls, error: str) -> redirect:
+        setattr(cls, "error", error)  # App.error accessed when rendering template
         return redirect("/error")
 
     @staticmethod
-    def display(message: str = ""):
-        os.system("cls" if os.name == "nt" else "clear")
+    def display(message: str = "") -> None:
+        cli("cls" if os_.startswith("win") else "clear")
         print(App.logo, App.url)
         if len(m := App.messages) > 9:
             m.pop(0)
@@ -71,15 +70,14 @@ class App:
 
 
 @hook("before_request")
-def _connect_db():
+def _connect_db() -> None:
     db.connect()
-    paths = ["/authenticate", "/config", "/settings", "/error"]
-    if not any(path in request.path for path in paths):
+    if not any(path in request.path for path in ["authenticate", "config", "settings", "error"]):
         Db.check_user()
-    
+
 
 @hook("after_request")
-def _close_db():
+def _close_db() -> None:
     if not db.is_closed():
         db.close()
 
@@ -102,7 +100,7 @@ class Streamer(BaseModel):
     login = TextField()
     display_name = TextField()
     broadcaster_type = TextField(default="user")
-    description = TextField(default="Twitch user")
+    description = TextField(default="Twitch streamer")
     profile_image_url = TextField()
     offline_image_url = TextField(default="config/offline.jpg")
     followed = BooleanField(default=False)
@@ -126,17 +124,15 @@ class Helix:
     )
 
     @staticmethod
-    def headers():
+    def headers() -> dict:
         return {"Client-ID": Helix.client_id, "Authorization": f"Bearer {User.get().access_token}"}
 
     @staticmethod
-    def get(params: str):
+    def get(params: str) -> list[dict]:
         try:
             with httpx.Client(headers=Helix.headers()) as session:
                 resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()["data"]
             return resp
-        except TimeoutException as e:
-            App.display(f"Connection timed out. Please try again. Error: {e}")
         except HTTPError as e:
             App.display(f"Error in handling request with params {params}. Error: {e}")
 
@@ -334,7 +330,7 @@ def channel(channel, mode=None, data=None):
             (Streamer.display_name == channel) | (Streamer.login == channel)
         )
     except DoesNotExist:
-        App.redirect("Page not found")
+        App.redirect_err("Page not found")
     date = {"start": "", "end": ""}
     if request.query.get("follow"):
         asyncio.run(Db.toggle_follow({channel}))
@@ -391,8 +387,8 @@ def browse(game_id="all"):
             streams = Helix.get(f"streams?first=50&game_id={game_id}")
             data = Fetch.stream_info(streams)
             return template("top.tpl", data=data, t="channels_filter", game=game)
-        except Exception:
-            App.redirect("Page not found")
+        except HTTPError:
+            App.redirect_err("Page not found")
 
 
 @route("/top/<t>")
@@ -406,7 +402,7 @@ def top(t):
         data = list(Game.select().where(Game.id.in_(games)))
         data.sort(key=lambda x: games.index(x.id))
     else:
-        App.redirect("Page not found")
+        App.redirect_err("Page not found")
     return template("top.tpl", data=data, t=t)
 
 
