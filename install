@@ -36,6 +36,7 @@ compile() {
     pyinstaller twitch_py/main.py --name twitch-py --onefile
     sudo mv dist/twitch-py $EXEC
     deactivate
+    rm -r build dist twitch-py.spec .venv
     exit 1
 }
 
