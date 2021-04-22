@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from platform import system
@@ -24,6 +25,7 @@ from peewee import (
     DoesNotExist,
     IntegerField,
     Model,
+    PeeweeException,
     SqliteDatabase,
     TextField,
 )
@@ -71,7 +73,10 @@ class App:
 @hook("before_request")
 def _connect_db():
     db.connect()
-
+    paths = ["/authenticate", "/config", "/settings", "/error"]
+    if not any(path in request.path for path in paths):
+        Db.check_user()
+    
 
 @hook("after_request")
 def _close_db():
@@ -130,10 +135,10 @@ class Helix:
             with httpx.Client(headers=Helix.headers()) as session:
                 resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()["data"]
             return resp
-        except TimeoutException:
-            App.display("Connection timed out. Please try again")
-        except HTTPError:
-            App.display(f"Error in handling request with params {params}")
+        except TimeoutException as e:
+            App.display(f"Connection timed out. Please try again. Error: {e}")
+        except HTTPError as e:
+            App.display(f"Error in handling request with params {params}. Error: {e}")
 
     @staticmethod
     def get_iter(params: str) -> list[dict]:
@@ -143,8 +148,8 @@ class Helix:
                 resp = session.get(f"{Helix.endpoint}/{params}").json()
                 try:
                     data: list[dict] = resp["data"]
-                except Exception:
-                    App.display(f"Error with {resp}")
+                except HTTPError as e:
+                    App.display(f"Error with {resp}. Caused the error {e}")
                 if data == []:
                     break
                 results += data
@@ -165,7 +170,11 @@ class Fetch:
             "Client-ID": Helix.client_id,
             "Authorization": f"Bearer {access_token}",
         }
-        user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
+        try:
+            user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
+        except HTTPError as e:
+            App.display(f"Error occurred: {e}")
+            sys.exit()
         user["access_token"] = access_token
         user["id"] = int(user["id"])
         return User.create(**user)
@@ -221,6 +230,12 @@ class Fetch:
 
 class Db:
     key_defaults = ["broadcaster_type", "description", "offline_image_url"]
+
+    @staticmethod
+    def check_user() -> redirect:
+        if db.table_exists("user") is False or User.get_or_none() is None:
+            App.display("No user found. Please log in.")
+            return redirect(Helix.oauth)
 
     @staticmethod
     async def cache(ids: set[int], mode: str) -> None:
@@ -295,12 +310,9 @@ class Db:
 
 @route("/")
 def index():
-    if db.table_exists("user") and User.get_or_none() is not None:
-        follows = Db.update_follows()
-        streams = Fetch.stream_info(asyncio.run(Fetch.live(follows)))
-        return template("index.tpl", User=User.get(), streams=streams)
-    else:
-        return redirect(Helix.oauth)
+    follows = Db.update_follows()
+    streams = Fetch.stream_info(asyncio.run(Fetch.live(follows)))
+    return template("index.tpl", User=User.get(), streams=streams)
 
 
 @route("/authenticate")
@@ -513,7 +525,12 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
 if __name__ == "__main__":
     App.display("Launching server...")
     try:
-        run(server="waitress", host="localhost", port=8080, quiet=True)
+        try:
+            run(server="waitress", host="localhost", port=8080, quiet=True)
+        except HTTPError as e:
+            App.display(f"{e}")
+        except PeeweeException as e:
+            App.display(f"{e}")
     except KeyboardInterrupt:
         pass
     finally:
