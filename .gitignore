@@ -143,3 +143,5 @@ poetry.lock
 noxfile.py
 wget-log*
 main.bin
+*.spec
+.vscode
