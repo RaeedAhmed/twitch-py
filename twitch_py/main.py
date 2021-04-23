@@ -1,10 +1,8 @@
 import asyncio
-import sys
+import shutil
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from shlex import split as lex
 from subprocess import DEVNULL, Popen
-from subprocess import run as cli
 
 import httpx
 import toml
@@ -29,26 +27,15 @@ from peewee import (
     TextField,
 )
 
-confdir = str(Path.home() / ".config/twitch-py")
+confdir = shutil.os.path.expanduser("~") + "/.config/twitch-py"
 TEMPLATE_PATH.insert(0, f"{confdir}/views")
 db = SqliteDatabase(f"{confdir}/data.db")
-os_ = sys.platform.lower()  # 'linux_', 'darwin_', 'win_"
+os_ = shutil.sys.platform.lower()  # 'linux_', 'darwin_', 'win_"
 
 
 class App:
     process: Popen = None  # Python subprocess
-    logo = "\n".join(
-        line.center(80)
-        for line in """
- _            _ _       _                       
-| |___      _(_) |_ ___| |__        _ __  _   _ 
-| __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |
-| |_ \ V  V /| | || (__| | | |_____| |_) | |_| |
- \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |
-                                   |_|    |___/ 
-    """.splitlines()
-    )
-    url = "http://localhost:8080/".center(80)
+    url = "http://localhost:8080/"
     messages = []
     count = 1
 
@@ -59,9 +46,21 @@ class App:
 
     @staticmethod
     def display(message: str = "") -> None:
-        cli("cls" if os_.startswith("win") else "clear")
-        print(App.logo, App.url)
-        if len(m := App.messages) > 9:
+        shutil.os.system("cls" if os_.startswith("win") else "clear")
+        t = shutil.get_terminal_size()
+        logo = "\n".join(
+                line.center(t.columns)
+                for line in """
+ _            _ _       _                       
+| |___      _(_) |_ ___| |__        _ __  _   _ 
+| __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |
+| |_ \ V  V /| | || (__| | | |_____| |_) | |_| |
+ \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |
+                                   |_|    |___/ 
+            """.splitlines()
+            )
+        print(logo, App.url.center(t.columns))
+        if len(m := App.messages) > (t.lines - 10):
             m.pop(0)
             App.count += 1
         m.append(message)
@@ -170,7 +169,7 @@ class Fetch:
             user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
         except HTTPError as e:
             App.display(f"Error occurred: {e}")
-            sys.exit()
+            shutil.sys.exit()
         user["access_token"] = access_token
         user["id"] = int(user["id"])
         return User.create(**user)
