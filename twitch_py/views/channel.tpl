@@ -1,12 +1,9 @@
 % rebase('base.tpl', title=channel.display_name)
-<header>
-    <h1><img src="{{channel.profile_image_url}}" alt="{{channel.login}}" width="75" loading="lazy">{{channel.display_name}}</h1>
+<section class="channel_info">
+    <h1><img src="{{channel.profile_image_url}}" alt="{{channel.login}}" width="75" loading="lazy">  {{channel.display_name}}</h1>
     <p broadcaster-type="{{channel.broadcaster_type}}"></p>
     <div>{{channel.description}}</div>
-    <p></p>
     <form action="https://www.twitch.tv/popout/{{channel.login}}/chat" target="_blank"><button>Chat</button></form>
-</header>
-<section>
     <form action="" method="get" id="follow">
         <button name="follow" value="{{'Unfollow' if channel.followed else 'Follow'}}">{{"Unfollow" if channel.followed else "Follow"}}</button>
     </form>
@@ -15,18 +12,18 @@
     </form>
     <form action="" method="get" id="clips">
         <label for="start">Start Date:</label>
-        <input type="date" id="start" name="start" value="{{date.get('start') or ''}}" required>
+        <input type="date" id="start" name="start" value="{{date['start']}}" required>
         <label for="end">End Date:</label>
-        <input type="date" id="end" name="end" value="{{date.get('end') or ''}}" required>
+        <input type="date" id="end" name="end" value="{{date['end']}}" required>
         <button name="clips" value="range">View Clips</button>
     </form>
 </section>
-<h3>{{"Past Broadcasts" if mode == "vod" else ""}}</h3>
+<h3>{{ {"vod":"Past Broadcasts","clip":"Clips"}.get(mode) or "VODs will appear here"}}</h3>
 <main class="grid">
     % if mode == "vod":
         % for vod in data:
-        <article>
-            <p>{{vod["title"]}}</p>
+        <article class="card">
+            <p title="{{vod['title']}}">{{vod['title']}}</p>
             <div class="thumbnail">
                 <a href="?video={{vod['url']}}"><img src="{{vod['thumbnail_url']}}" alt="" loading="lazy" width=100% height=100%></a>
                 <div class="tr">
@@ -47,8 +44,8 @@
     % end
     % if mode == "clip":
         % for clip in data:
-            <article>
-                <p>{{clip['title']}}</p>
+            <article class="card">
+                <p title="{{clip['title']}}">{{clip['title']}}</p>
                 <div class="thumbnail">
                     <a href="?video={{clip['url']}}"><img src="{{clip['thumbnail_url']}}" alt="" width="100%" height="100%" loading="lazy"></a>
                     <div class="tr">
@@ -61,7 +58,7 @@
                     </div>
                 </div>
                 % if clip['game_id']:
-                <p><a href="/categories/{{clip['game_id']}}"><img src="{{clip['box_art_url']}}" alt="" width="50" loading="lazy"></a>{{clip['game_name']}}</p>
+                <p><a href="/categories/{{clip['game_id']}}"><img src="{{clip['box_art_url']}}" alt="" width="50" loading="lazy"></a>  {{clip['game_name']}}</p>
                 % end
                 % if clip['vod_link']:
                 <form action="" method="get" id="video">

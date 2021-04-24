@@ -348,6 +348,7 @@ def channel(channel, mode=None, data=None):
         )
         data = process_data(clips, mode="clip")
         data = sorted(data, key=lambda info: info["view_count"], reverse=True)
+        date = {"start": start[:-10], "end": end[:-10]}
     elif url := request.query.get("video"):
         watch_video(mode="vod", url=url)
         return """<script>setTimeout(function () { window.history.back() });</script>"""
