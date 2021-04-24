@@ -37,10 +37,12 @@ class App:
     process: Popen = None  # Python subprocess
     url = "http://localhost:8080/"
     messages = []
+    error = None
 
     @classmethod
     def redirect_err(cls, error: str) -> redirect:
         setattr(cls, "error", error)  # App.error accessed when rendering template
+        App.display(f"{error}")
         return redirect("/error")
 
     @staticmethod
