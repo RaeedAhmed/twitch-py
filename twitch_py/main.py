@@ -1,5 +1,4 @@
 import asyncio
-from os import sep
 import shutil
 from datetime import datetime, timedelta, timezone
 from shlex import split as lex
