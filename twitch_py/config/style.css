@@ -190,3 +190,9 @@ p[broadcaster-type="affiliate"]::after {
     color: mediumpurple;
     content: attr(broadcaster-type);
 }
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+    gap: 1rem;
+}

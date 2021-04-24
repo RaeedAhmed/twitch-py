@@ -17,10 +17,10 @@
 </main>
 % end
 % if t in ["channels", "channels_filter"]:
-<main>
+<main class="grid">
 % for stream in data:
     <article>
-        <h3><a href="/{{stream['user_login']}}"><img src="{{stream['profile_image_url']}}" alt="stream['user_name']" width="50"></a>{{stream["user_name"]}}</h3>
+        <h3><a href="/{{stream['user_login']}}"><img src="{{stream['profile_image_url']}}" alt="stream['user_name']" width="75"></a>  {{stream["user_name"]}}</h3>
         <p>{{stream['title']}}</p>
         <div class="thumbnail">
             <a href="/{{stream['user_login']}}?watch=live"><img src="{{stream['thumbnail_url']}}" alt="{{stream['title']}}" width=100% height=100% loading="lazy"></a>

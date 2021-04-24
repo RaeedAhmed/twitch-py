@@ -21,9 +21,9 @@
         <button name="clips" value="range">View Clips</button>
     </form>
 </section>
-<main>
+<h3>{{"Past Broadcasts" if mode == "vod" else ""}}</h3>
+<main class="grid">
     % if mode == "vod":
-        <h3>Past Broadcasts:</h3>
         % for vod in data:
         <article>
             <p>{{vod["title"]}}</p>
