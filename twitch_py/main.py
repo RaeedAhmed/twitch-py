@@ -30,19 +30,18 @@ from peewee import (
 confdir = shutil.os.path.expanduser("~") + "/.config/twitch-py"
 TEMPLATE_PATH.insert(0, f"{confdir}/views")
 db = SqliteDatabase(f"{confdir}/data.db")
-os_ = shutil.sys.platform.lower()  # 'linux_', 'darwin_', 'win_"
+os_ = shutil.sys.platform.lower()
 
 
 class App:
-    process: Popen = None  # Python subprocess
+    process: Popen = None
     url = "http://localhost:8080/"
     messages = []
     error = None
 
     @classmethod
     def redirect_err(cls, error: str) -> redirect:
-        setattr(cls, "error", error)  # App.error accessed when rendering template
-        App.display(f"{error}")
+        setattr(cls, "error", error)
         return redirect("/error")
 
     @staticmethod
