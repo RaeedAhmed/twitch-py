@@ -1,4 +1,5 @@
 import asyncio
+from os import sep
 import shutil
 from datetime import datetime, timedelta, timezone
 from shlex import split as lex
@@ -37,7 +38,6 @@ class App:
     process: Popen = None  # Python subprocess
     url = "http://localhost:8080/"
     messages = []
-    count = 1
 
     @classmethod
     def redirect_err(cls, error: str) -> redirect:
@@ -59,13 +59,10 @@ class App:
                                    |_|    |___/ 
             """.splitlines()
             )
-        print(logo, App.url.center(t.columns))
-        if len(m := App.messages) > (t.lines - 10):
-            m.pop(0)
-            App.count += 1
-        m.append(message)
-        for i, msg in enumerate(m, start=App.count):
-            print(f"[{i}]".center(5) + f"> {msg}")
+        divide = ("─"*round(t.columns/1.5)).center(t.columns) + "\n"
+        print(logo, App.url.center(t.columns), sep="\n", end=divide)
+        (m := App.messages).append(message)
+        print(*[f"> {msg}" for msg in m[-min(len(m), (t.lines - 12)):]], sep="\n")
 
 
 @hook("before_request")
@@ -315,6 +312,7 @@ def authenticate():
     if access_token := request.query.get("access_token"):
         db.create_tables([User, Streamer, Game])
         user = Fetch.user(access_token)
+        App.display(f"Logged in as {user.display_name}")
         follows = Fetch.follows(user.get().id)
         asyncio.run(Db.cache(follows, "users"))
         Streamer.update(followed=True).execute()
