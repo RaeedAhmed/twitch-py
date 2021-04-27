@@ -49,8 +49,8 @@ class App:
         shutil.os.system("cls" if os_.startswith("win") else "clear")
         t = shutil.get_terminal_size()
         logo = "\n".join(
-                line.center(t.columns)
-                for line in """
+            line.center(t.columns)
+            for line in """
  _            _ _       _                       
 | |___      _(_) |_ ___| |__        _ __  _   _ 
 | __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |
@@ -58,11 +58,11 @@ class App:
  \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |
                                    |_|    |___/ 
             """.splitlines()
-            )
-        divide = ("─"*round(t.columns/1.5)).center(t.columns) + "\n"
+        )
+        divide = ("─" * round(t.columns / 1.5)).center(t.columns) + "\n"
         print(logo, App.url.center(t.columns), sep="\n", end=divide)
         (m := App.messages).append(message)
-        print(*[f"> {msg}" for msg in m[-min(len(m), (t.lines - 12)):]], sep="\n")
+        print(*[f"> {msg}" for msg in m[-min(len(m), (t.lines - 12)) :]], sep="\n")
 
 
 @hook("before_request")
@@ -503,11 +503,8 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
             elapsed = round((timestamp - vod_start).total_seconds() - 61)
             if "h" not in clip["vod"]["duration"]:
                 clip["vod"]["duration"] = f"0h{clip['vod']['duration']}"
-            hours = elapsed // 3600
-            elapsed %= 3600
-            minutes = elapsed // 60
-            elapsed %= 60
-            seconds = elapsed
+            minutes, seconds = divmod(elapsed, 60)
+            hours, minutes = divmod(minutes, 60)
             clip[
                 "vod_link"
             ] = f"http://www.twitch.tv/videos/{vod_id}/?t={hours}h{minutes}m{seconds}s"
@@ -519,12 +516,7 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
 if __name__ == "__main__":
     App.display("Launching server...")
     try:
-        try:
-            run(server="waitress", host="localhost", port=8080, quiet=True)
-        except HTTPError as e:
-            App.display(f"{e}")
-        except PeeweeException as e:
-            App.display(f"{e}")
+        run(server="waitress", host="localhost", port=8080, quiet=True)
     except KeyboardInterrupt:
         pass
     finally:
