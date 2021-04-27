@@ -30,7 +30,6 @@ cp -R twitch_py/views $CONFDIR
 }
 
 compile() {
-    pip3 install --user streamlink
     python3 -m venv .venv
     source .venv/bin/activate
     pip install -r requirements.txt
@@ -69,6 +68,7 @@ done
 setupConf
 rmExec
 dlBin
+pip3 install --user --upgrade streamlink
 
 
 
