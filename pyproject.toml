@@ -14,7 +14,6 @@ bottle = "^0.12.19"
 peewee = "^3.14.4"
 toml = "^0.10.2"
 waitress = "^2.0.0"
-streamlink = "^2.1.1"
 pyinstaller = "^4.3"
 
 [tool.poetry.dev-dependencies]

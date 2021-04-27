@@ -1,5 +1,6 @@
 # twitch-py
 ## Installation
+Ensure that the latest python version as well as `pip` are installed on your device.
 ```bash
 git clone https://github.com/RaeedAhmed/twitch-py.git
 cd twitch-py
