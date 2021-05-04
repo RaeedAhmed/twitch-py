@@ -2,54 +2,12 @@
 ## Installation
 Ensure that the latest python version as well as `pip` are installed on your device.
 ```bash
-git clone https://github.com/RaeedAhmed/twitch-py.git
-cd twitch-py
+curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | sudo bash -s
 ```
-### Download executable
-Quick installation:
-Ensure either `wget` or `curl` is installed on your machine
-
-In `twitch-py/`:
-```bash
-./install
-```
-After restarting the shell, run the program:
-```bash
-twitch-py
-```
-
-### Local installation
-If you would like to modify the script as well as have the convenience of an executable:
-Ensure the you are able to access python's `venv` module. You may need to install it:
-```bash
-sudo apt install python3-venv # for Debian systems
-```
-Installation via `venv` and `pyinstaller` is dont with the `-c` flag:
-```bash
-./install -c # compile your own binary
-twitch-py # in a new shell
-```
-
-### Python Interpreter
-If you prefer modifying the code yourself before running, you can run the script directly:
-**Create a virtual environment**
-
-This can be done in a number of ways, but using python built-in `venv` module:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-Installing dependencies and running:
-```bash
-pip install .
-./install -p # -p to setup config files only
-python twitch_py/main.py
-```
-
 ### Uninstall
 Remove executable and config files from system with the `-u` flag:
 ```bash
-./install -u
+curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | sudo bash -s -u
 ```
 ## Usage
 Go to `localhost:8080` and follow login prompt if not signed in.
