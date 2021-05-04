@@ -5,11 +5,6 @@ multi = false
 app = "mpv"
 args = "--hwdec=auto --screen=1 --fs --keep-open=yes"
 
-[windows]
-multi = false
-app = "C:\\Program\\Files\\VideoLAN\\VLC\\vlc.exe"
-args = ""
-
 [darwin]
 multi = false
 app = ""

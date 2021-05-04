@@ -28,7 +28,7 @@ class App:
 
     @staticmethod
     def display(message: str = "") -> None:
-        shutil.os.system("cls" if os_.startswith("win") else "clear")
+        shutil.os.system("clear")
         t = shutil.get_terminal_size()
         logo = "\n".join(
             line.center(t.columns)
@@ -165,7 +165,7 @@ class Fetch:
         tmp = list(ids)
         id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]  # chunks of 100 ids
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
-            stream_list: list[Response] = await asyncio.gather(
+            stream_list: list[httpx.Response] = await asyncio.gather(
                 *(
                     session.get(
                         f"{Helix.endpoint}/streams?{'&'.join([f'user_id={i}' for i in i_list])}"
@@ -222,7 +222,7 @@ class Db:
             return None
         id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
-            resps: list[Response] = await asyncio.gather(
+            resps: list[httpx.Response] = await asyncio.gather(
                 *(
                     session.get(f"{Helix.endpoint}/{mode}?{'&'.join([f'id={i}' for i in i_list])}")
                     for i_list in id_lists
@@ -391,9 +391,8 @@ def top(t):
 @bt.route("/settings")
 def settings():
     if bt.request.query.get("open"):
-        if os_.startswith("linux"):
-            Popen(f"open {confdir}/config/settings.toml", shell=True, close_fds=True)
-            return bt.redirect("/settings")
+        Popen(f"open {confdir}/config/settings.toml", shell=True, close_fds=True)
+        return bt.redirect("/settings")
     config = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
     return bt.template("settings.tpl", config=config)
 
@@ -422,18 +421,16 @@ def time_elapsed(start: str, d="") -> str:
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
     c = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
     if c["multi"] is False and App.process is not None:
-        if os_.startswith("linux"):
-            App.process.terminate()
-    if os_.startswith("linux"):
-        if mode == "live":
-            App.display(f"Launching stream twitch.tv/{channel}")
-            command = f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
-                    --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best'
-        else:
-            App.display(f"Launching video: {url}")
-            command = f'{c["app"]} {c["args"]} --really-quiet {url}'
-        if c["multi"] is False:
-            App.process = Popen(lex(command), stdout=DEVNULL)
+        App.process.terminate()
+    if mode == "live":
+        App.display(f"Launching stream twitch.tv/{channel}")
+        command = f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
+                --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best'
+    else:
+        App.display(f"Launching video: {url}")
+        command = f'{c["app"]} {c["args"]} --really-quiet {url}'
+    if c["multi"] is False:
+        App.process = Popen(lex(command), stdout=DEVNULL)
 
 
 def process_data(data: list[dict], mode: str) -> list[dict]:
