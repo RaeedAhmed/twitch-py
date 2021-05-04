@@ -6,7 +6,7 @@ BIN=https://github.com/RaeedAhmed/$NAME/releases/latest/download/$NAME
 REPO=https://github.com/RaeedAhmed/$NAME.git
 
 git clone $REPO
-cd $REPO
+cd $NAME
 
 rmConf() {
 if [ -d "$CONFDIR" ]; then

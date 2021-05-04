@@ -2,12 +2,12 @@
 ## Installation
 Ensure that the latest python version as well as `pip` are installed on your device.
 ```bash
-curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | sudo bash -s
+curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s
 ```
 ### Uninstall
 Remove executable and config files from system with the `-u` flag:
 ```bash
-curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | sudo bash -s -u
+curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -u
 ```
 ## Usage
 Go to `localhost:8080` and follow login prompt if not signed in.
