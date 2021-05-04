@@ -4,32 +4,14 @@ from datetime import datetime, timedelta, timezone
 from shlex import split as lex
 from subprocess import DEVNULL, Popen
 
+import bottle as bt
 import httpx
+import peewee as pw
 import toml
-from bottle import (
-    TEMPLATE_PATH,
-    hook,
-    redirect,
-    request,
-    route,
-    run,
-    static_file,
-    template,
-)
-from httpx import AsyncClient, HTTPError, Response
-from peewee import (
-    BooleanField,
-    DoesNotExist,
-    IntegerField,
-    Model,
-    PeeweeException,
-    SqliteDatabase,
-    TextField,
-)
 
 confdir = shutil.os.path.expanduser("~") + "/.config/twitch-py"
-TEMPLATE_PATH.insert(0, f"{confdir}/views")
-db = SqliteDatabase(f"{confdir}/data.db")
+bt.TEMPLATE_PATH.insert(0, f"{confdir}/views")
+db = pw.SqliteDatabase(f"{confdir}/data.db")
 os_ = shutil.sys.platform.lower()
 
 
@@ -40,9 +22,9 @@ class App:
     error = None
 
     @classmethod
-    def redirect_err(cls, error: str) -> redirect:
+    def redirect_err(cls, error: str) -> bt.redirect:
         setattr(cls, "error", error)
-        return redirect("/error")
+        return bt.redirect("/error")
 
     @staticmethod
     def display(message: str = "") -> None:
@@ -65,47 +47,49 @@ class App:
         print(*[f"> {msg}" for msg in m[-min(len(m), (t.lines - 12)) :]], sep="\n")
 
 
-@hook("before_request")
+@bt.hook("before_request")
 def _connect_db() -> None:
     db.connect()
-    if not any(path in request.path for path in ["authenticate", "config", "settings", "error"]):
+    if not any(
+        path in bt.request.path for path in ["authenticate", "config", "settings", "error"]
+    ):
         Db.check_user()
 
 
-@hook("after_request")
+@bt.hook("after_request")
 def _close_db() -> None:
     if not db.is_closed():
         db.close()
 
 
-class BaseModel(Model):
+class BaseModel(pw.Model):
     class Meta:
         database = db
 
 
 class User(BaseModel):
-    id = IntegerField()
-    login = TextField()
-    display_name = TextField()
-    profile_image_url = TextField()
-    access_token = TextField()
+    id = pw.IntegerField()
+    login = pw.TextField()
+    display_name = pw.TextField()
+    profile_image_url = pw.TextField()
+    access_token = pw.TextField()
 
 
 class Streamer(BaseModel):
-    id = IntegerField(primary_key=True)
-    login = TextField()
-    display_name = TextField()
-    broadcaster_type = TextField(default="user")
-    description = TextField(default="Twitch streamer")
-    profile_image_url = TextField()
-    offline_image_url = TextField(default="config/offline.jpg")
-    followed = BooleanField(default=False)
+    id = pw.IntegerField(primary_key=True)
+    login = pw.TextField()
+    display_name = pw.TextField()
+    broadcaster_type = pw.TextField(default="user")
+    description = pw.TextField(default="Twitch streamer")
+    profile_image_url = pw.TextField()
+    offline_image_url = pw.TextField(default="config/offline.jpg")
+    followed = pw.BooleanField(default=False)
 
 
 class Game(BaseModel):
-    id = IntegerField(primary_key=True)
-    name = TextField()
-    box_art_url = TextField()
+    id = pw.IntegerField(primary_key=True)
+    name = pw.TextField()
+    box_art_url = pw.TextField()
 
 
 class Helix:
@@ -129,7 +113,7 @@ class Helix:
             with httpx.Client(headers=Helix.headers()) as session:
                 resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()["data"]
             return resp
-        except HTTPError as e:
+        except httpx.HTTPError as e:
             App.display(f"Error in handling request with params {params}. Error: {e}")
 
     @staticmethod
@@ -140,7 +124,7 @@ class Helix:
                 resp = session.get(f"{Helix.endpoint}/{params}").json()
                 try:
                     data: list[dict] = resp["data"]
-                except HTTPError as e:
+                except httpx.HTTPError as e:
                     App.display(f"Error with {resp}. Caused the error {e}")
                 if data == []:
                     break
@@ -164,7 +148,7 @@ class Fetch:
         }
         try:
             user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
-        except HTTPError as e:
+        except httpx.HTTPError as e:
             App.display(f"Error occurred: {e}")
             shutil.sys.exit()
         user["access_token"] = access_token
@@ -224,10 +208,10 @@ class Db:
     key_defaults = ["broadcaster_type", "description", "offline_image_url"]
 
     @staticmethod
-    def check_user() -> redirect:
+    def check_user() -> bt.redirect:
         if db.table_exists("user") is False or User.get_or_none() is None:
             App.display("No user found. Please log in.")
-            return redirect(Helix.oauth)
+            return bt.redirect(Helix.oauth)
 
     @staticmethod
     async def cache(ids: set[int], mode: str) -> None:
@@ -281,7 +265,7 @@ class Db:
     async def toggle_follow(streamers: set[Streamer]) -> None:
         url = f"{Helix.endpoint}/users/follows"
 
-        async def send(session: AsyncClient, data: dict, streamer: Streamer):
+        async def send(session: httpx.AsyncClient, data: dict, streamer: Streamer):
             Streamer.update(followed=not streamer.followed).where(
                 Streamer.id == streamer.id
             ).execute()
@@ -300,96 +284,96 @@ class Db:
             await asyncio.gather(*tasks)
 
 
-@route("/")
+@bt.route("/")
 def index():
     follows = Db.update_follows()
     streams = Fetch.stream_info(asyncio.run(Fetch.live(follows)))
-    return template("index.tpl", User=User.get(), streams=streams)
+    return bt.template("index.tpl", User=User.get(), streams=streams)
 
 
-@route("/authenticate")
+@bt.route("/authenticate")
 def authenticate():
-    if access_token := request.query.get("access_token"):
+    if access_token := bt.request.query.get("access_token"):
         db.create_tables([User, Streamer, Game])
         user = Fetch.user(access_token)
         App.display(f"Logged in as {user.display_name}")
         follows = Fetch.follows(user.get().id)
         asyncio.run(Db.cache(follows, "users"))
         Streamer.update(followed=True).execute()
-        return redirect("/")
-    return template("authenticate.tpl")
+        return bt.redirect("/")
+    return bt.template("authenticate.tpl")
 
 
-@route("/<channel>")
+@bt.route("/<channel>")
 def channel(channel, mode=None, data=None):
     try:
         channel: Streamer = Streamer.get(
             (Streamer.display_name == channel) | (Streamer.login == channel)
         )
-    except DoesNotExist:
+    except pw.DoesNotExist:
         App.redirect_err("Page not found")
     date = {"start": "", "end": ""}
-    if request.query.get("follow"):
+    if bt.request.query.get("follow"):
         asyncio.run(Db.toggle_follow({channel}))
-        redirect(f"/{channel.login}")
-    elif request.query.get("watch"):
+        bt.redirect(f"/{channel.login}")
+    elif bt.request.query.get("watch"):
         watch_video(channel.login)
         return """<script>setTimeout(function () { window.history.back() });</script>"""
-    elif request.query.get("vod"):
+    elif bt.request.query.get("vod"):
         mode = "vod"
         vods = Helix.get_iter(f"videos?user_id={channel.id}&type=archive")
         data = process_data(vods, mode)
-    elif request.query.get("clips"):
+    elif bt.request.query.get("clips"):
         mode = "clip"
-        start = request.query.get("start") + "T00:00:00Z"
-        end = request.query.get("end") + "T00:00:00Z"
+        start = bt.request.query.get("start") + "T00:00:00Z"
+        end = bt.request.query.get("end") + "T00:00:00Z"
         clips = Helix.get(
             f"clips?broadcaster_id={channel.id}&first=100&started_at={start}&ended_at={end}"
         )
         data = process_data(clips, mode="clip")
         data = sorted(data, key=lambda info: info["view_count"], reverse=True)
         date = {"start": start[:-10], "end": end[:-10]}
-    elif url := request.query.get("video"):
+    elif url := bt.request.query.get("video"):
         watch_video(mode="vod", url=url)
         return """<script>setTimeout(function () { window.history.back() });</script>"""
-    elif request.query.get("close"):
-        redirect(f"/{channel.login}")
-    return template("channel.tpl", channel=channel, mode=mode, data=data, date=date)
+    elif bt.request.query.get("close"):
+        bt.redirect(f"/{channel.login}")
+    return bt.template("channel.tpl", channel=channel, mode=mode, data=data, date=date)
 
 
-@route("/search")
+@bt.route("/search")
 def search():
-    query = request.query.q
-    t = request.query.t
+    query = bt.request.query.q
+    t = bt.request.query.t
     mode, model, count = ("games", Game, 10) if t == "categories" else ("users", Streamer, 5)
     ids = {int(result["id"]) for result in Helix.get(f"search/{t}?query={query}&first={count}")}
     asyncio.run(Db.cache(ids, mode=mode))
     results = model.select().where(model.id.in_(ids))
-    return template("search.tpl", query=query, mode=mode, results=results)
+    return bt.template("search.tpl", query=query, mode=mode, results=results)
 
 
-@route("/following")
+@bt.route("/following")
 def following():
     Db.update_follows()
     follows = Streamer.select().where(Streamer.followed == True).order_by(Streamer.display_name)
-    return template("following.tpl", follows=follows)
+    return bt.template("following.tpl", follows=follows)
 
 
-@route("/categories/<game_id>")
+@bt.route("/categories/<game_id>")
 def browse(game_id="all"):
     if game_id == "all":
-        return redirect("/top/games")
+        return bt.redirect("/top/games")
     else:
         try:
             game: Game = Game.get(int(game_id))
             streams = Helix.get(f"streams?first=50&game_id={game_id}")
             data = Fetch.stream_info(streams)
-            return template("top.tpl", data=data, t="channels_filter", game=game)
-        except HTTPError:
+            return bt.template("top.tpl", data=data, t="channels_filter", game=game)
+        except httpx.HTTPError:
             App.redirect_err("Page not found")
 
 
-@route("/top/<t>")
+@bt.route("/top/<t>")
 def top(t):
     if t == "channels":
         top_streams = Helix.get("streams?first=50")
@@ -401,27 +385,27 @@ def top(t):
         data.sort(key=lambda x: games.index(x.id))
     else:
         App.redirect_err("Page not found")
-    return template("top.tpl", data=data, t=t)
+    return bt.template("top.tpl", data=data, t=t)
 
 
-@route("/settings")
+@bt.route("/settings")
 def settings():
-    if request.query.get("open"):
+    if bt.request.query.get("open"):
         if os_.startswith("linux"):
             Popen(f"open {confdir}/config/settings.toml", shell=True, close_fds=True)
-            return redirect("/settings")
+            return bt.redirect("/settings")
     config = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
-    return template("settings.tpl", config=config)
+    return bt.template("settings.tpl", config=config)
 
 
-@route("/config/<filename:path>")
+@bt.route("/config/<filename:path>")
 def send_static(filename):
-    return static_file(filename, root=f"{confdir}/config/")
+    return bt.static_file(filename, root=f"{confdir}/config/")
 
 
-@route("/error")
+@bt.route("/error")
 def error_page():
-    return template("error_page.tpl", error=App.error)
+    return bt.template("error_page.tpl", error=App.error)
 
 
 def time_elapsed(start: str, d="") -> str:
@@ -445,10 +429,10 @@ def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
             App.display(f"Launching stream twitch.tv/{channel}")
             command = f'streamlink -l none -p {c["app"]} -a "{c["args"]}" \
                     --twitch-disable-ads --twitch-low-latency twitch.tv/{channel} best'
-            App.process = Popen(lex(command), stdout=DEVNULL)
         else:
             App.display(f"Launching video: {url}")
             command = f'{c["app"]} {c["args"]} --really-quiet {url}'
+        if c["multi"] is False:
             App.process = Popen(lex(command), stdout=DEVNULL)
 
 
@@ -516,8 +500,11 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
 if __name__ == "__main__":
     App.display("Launching server...")
     try:
-        run(server="waitress", host="localhost", port=8080, quiet=True)
+        bt.run(server="waitress", host="localhost", port=8080, quiet=True)
     except KeyboardInterrupt:
         pass
+    except httpx.HTTPError as e:
+        App.display(f"Error: {e}. Retrying...")
+        bt.redirect(bt.request.path)
     finally:
         App.display("Exiting...")
