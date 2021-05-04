@@ -390,10 +390,15 @@ def top(t):
 
 @bt.route("/settings")
 def settings():
+    command = lex(f"open {confdir}/config/settings.toml")
     if bt.request.query.get("open"):
-        Popen(f"open {confdir}/config/settings.toml", shell=True, close_fds=True)
+        Popen(command)
         return bt.redirect("/settings")
-    config = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
+    try:
+        config = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
+    except toml.TomlDecodeError as e:
+        Popen(command)
+        App.redirect_err(f"Could not parse settings file: {e}")
     return bt.template("settings.tpl", config=config)
 
 
