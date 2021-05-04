@@ -429,8 +429,9 @@ def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
     else:
         App.display(f"Launching video: {url}")
         command = f'{c["app"]} {c["args"]} --really-quiet {url}'
+    p = Popen(lex(command), stdout=DEVNULL)
     if c["multi"] is False:
-        App.process = Popen(lex(command), stdout=DEVNULL)
+        App.process = p
 
 
 def process_data(data: list[dict], mode: str) -> list[dict]:
