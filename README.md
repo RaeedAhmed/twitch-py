@@ -7,7 +7,7 @@ curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | 
 ### Uninstall
 Remove executable and config files from system with the `-u` flag:
 ```bash
-curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -u
+curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -- -u
 ```
 ## Usage
 Go to `localhost:8080` and follow login prompt if not signed in.
