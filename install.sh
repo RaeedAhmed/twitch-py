@@ -5,9 +5,6 @@ NAME=twitch-py
 BIN=https://github.com/RaeedAhmed/$NAME/releases/latest/download/$NAME
 REPO=https://github.com/RaeedAhmed/$NAME.git
 
-git clone $REPO
-cd $NAME
-
 rmConf() {
 if [ -d "$CONFDIR" ]; then
     echo "Removing config files..."
@@ -60,6 +57,8 @@ do
 done
 
 # No flags
+git clone $REPO
+cd $NAME
 setupConf
 rmExec
 dlBin
