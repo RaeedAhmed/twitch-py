@@ -1,7 +1,12 @@
 #!/bin/bash
 CONFDIR=$HOME/.config/twitch-py
 EXEC=/usr/local/bin/twitch-py
-BIN=https://github.com/RaeedAhmed/twitch-py/releases/latest/download/twitch-py.bin
+NAME=twitch-py
+BIN=https://github.com/RaeedAhmed/$NAME/releases/latest/download/$NAME
+REPO=https://github.com/RaeedAhmed/$NAME.git
+
+git clone $REPO
+cd $REPO
 
 rmConf() {
 if [ -d "$CONFDIR" ]; then
@@ -29,17 +34,6 @@ cp -R twitch_py/config $CONFDIR
 cp -R twitch_py/views $CONFDIR
 }
 
-compile() {
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
-    pyinstaller twitch_py/main.py --name twitch-py --onefile
-    sudo mv dist/twitch-py $EXEC
-    deactivate
-    rm -r build dist twitch-py.spec .venv
-    exit 1
-}
-
 uninstall() {
 rmConf
 rmExec
@@ -51,15 +45,16 @@ sudo wget -q --show-progress -O $EXEC $BIN || sudo curl -sL $BIN | sudo tee $EXE
 sudo chmod +x $EXEC
 }
 
+rmRepo() {
+    cd ..
+    sudo rm -r $NAME
+}
+
 while getopts cpu option
 do
     case "${option}"
     in
-    c) setupConf; compile; exit 1
-    ;;
-    p) setupConf; exit 1
-    ;;
-    u) uninstall; exit 1
+    u) uninstall; rmRepo; exit 1
     ;;
     esac
 done
@@ -69,6 +64,7 @@ setupConf
 rmExec
 dlBin
 pip3 install --user --upgrade streamlink
+rmRepo
 
 
 
