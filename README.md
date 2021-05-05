@@ -4,7 +4,7 @@ Download `streamlink` by following the instructions [in the docs](https://stream
 
 Ensure that `curl` and `unzip` are installed on your device 
 
-Append the flag [i]nstall or [u]install to run the script:
+Append the flag [i]nstall or [u]ninstall to run the script:
 ```bash
 curl -sL https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -- -i
 ```
