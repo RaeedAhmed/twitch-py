@@ -8,7 +8,7 @@ REPO=https://github.com/RaeedAhmed/$NAME.git
 BACKUP=/var/local/$NAME
 
 setup() {
-    for p in curl unzip pip3:
+    for p in curl unzip pip3
         do
             type $p >/dev/null 2>&1 || 
             { echo >&2 "$p is not installed. Aborting."; exit 1; }
