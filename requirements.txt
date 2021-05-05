@@ -1,0 +1,6 @@
+httpx==0.18.1
+waitress
+bottle
+peewee
+toml
+
