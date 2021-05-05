@@ -8,11 +8,11 @@ REPO=https://github.com/RaeedAhmed/$NAME.git
 BACKUP=/var/local/$NAME
 
 setup() {
-    if ! command -v unzip &> /dev/null
-    then
-        echo " > 'unzip' is not installed. Installation Cancelled."
-        exit
-    fi
+    for p in curl unzip pip3:
+        do
+            type $p >/dev/null 2>&1 || 
+            { echo >&2 "$p is not installed. Aborting."; exit 1; }
+        done
     echo " > Starting twitch-py installation..."
     mkdir $TEMPDIR
     cd $TEMPDIR
@@ -51,17 +51,18 @@ dlFiles() {
     sudo chmod +x $EXEC
     echo " > Downloading repository"
     curl -sL https://github.com/RaeedAhmed/$NAME/archive/refs/heads/master.zip -o $NAME.zip
-    unzip $NAME.zip -d $NAME
+    unzip -q $NAME.zip -d $NAME
     echo " > Configuring static files"
     mkdir $CONFDIR
-    cp -R $NAME/src/config $CONFDIR
-    cp -R $NAME/src/views $CONFDIR
+    cp -R $NAME/$NAME-master/src/config $CONFDIR
+    cp -R $NAME/$NAME-master/src/views $CONFDIR
     echo " > Installing Streamlink"
     pip3 install -q --user streamlink
 }
 
 restoreDB() {
-    if [ -f $BACKUP/data.db.old]; then
+    if [ -f $BACKUP/data.db.old ]; then
+    	echo " > Restoring backup DB from $BACKUP"
         cp $BACKUP/data.db $CONFDIR
     fi
 }
