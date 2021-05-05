@@ -3,7 +3,7 @@
 Ensure that `curl`, `pip`, and `unzip` are installed on your device.
 To install, use the `-i` flag, and to uninstall use the `-u` flag:
 ```bash
-curl https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -- -i
+curl -sL https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -- -i
 ```
 ## Usage
 Go to `localhost:8080` and follow login prompt if not signed in.
