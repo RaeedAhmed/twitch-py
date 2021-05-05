@@ -1,10 +1,14 @@
 # twitch-py
 ## Installation
-Ensure that `curl`, `pip`, and `unzip` are installed on your device.
-To install, use the `-i` flag, and to uninstall use the `-u` flag:
+Download `streamlink` by following the instructions [in the docs](https://streamlink.github.io/install.html)
+
+Ensure that `curl` and `unzip` are installed on your device 
+
+Append the flag [i]nstall or [u]install to run the script:
 ```bash
 curl -sL https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -- -i
 ```
+Run `twitch-py` to start the application
 ## Usage
 Go to `localhost:8080` and follow login prompt if not signed in.
 

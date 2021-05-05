@@ -8,7 +8,7 @@ REPO=https://github.com/RaeedAhmed/$NAME.git
 BACKUP=/var/local/$NAME
 
 setup() {
-    for p in curl unzip pip3
+    for p in curl unzip streamlink
         do
             type $p >/dev/null 2>&1 || 
             { echo >&2 "$p is not installed. Aborting."; exit 1; }
@@ -57,7 +57,6 @@ dlFiles() {
     cp -R $NAME/$NAME-master/src/config $CONFDIR
     cp -R $NAME/$NAME-master/src/views $CONFDIR
     echo " > Installing Streamlink"
-    pip3 install -q --user streamlink
 }
 
 restoreDB() {
