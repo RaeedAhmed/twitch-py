@@ -2,13 +2,20 @@
 ## Installation
 Download `streamlink` by following the instructions [in the docs](https://streamlink.github.io/install.html)
 
-Ensure that `curl` and `unzip` are installed on your device 
+Ensure that `curl` and `unzip` are installed on your device
 
-Append the flag [i]nstall or [u]ninstall to run the script:
+Use the one line install below after installing dependencies: 
 ```bash
 curl -sL https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh | bash -s -- -i
 ```
+
+You will need a media player of your choice (`mpv`, `vlc`, etc.). Be sure to change the player and its arguments located in `~/.config/twitch-py/config/settings.toml`
+
 Run `twitch-py` to start the application
+
+### Update/Uninstall
+Run `twitch-py -h` to list any arguments to pass through. You can update or uninstall using the relevant flags.
+
 ## Usage
 Go to `localhost:8080` and follow login prompt if not signed in.
 

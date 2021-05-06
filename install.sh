@@ -68,7 +68,7 @@ restoreDB() {
 clean_() {
     cd ..
     sudo rm -r $TEMPDIR
-    echo " > Installation complete"
+    echo " > Installation complete. Run 'twitch-py' to begin."
 }
 
 install_() {

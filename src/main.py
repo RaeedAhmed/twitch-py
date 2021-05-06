@@ -533,17 +533,14 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
 
 
 def install(arg: str) -> None:
-    commands = []
-    commands.append(
-        lex(
-            "curl -sL -o twitch-install.sh https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh"
-        )
-    )
-    commands.append(lex("chmod +x twitch-install.sh"))
-    commands.append(lex(f"./twitch-install.sh -{arg}"))
-    commands.append(lex("rm twitch-install.sh"))
+    commands = [
+        "curl -sL -o twitch-install.sh https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh",
+        "chmod +x twitch-install.sh",
+        f"./twitch-install.sh -{arg}",
+        "rm twitch-install.sh",
+    ]
     for command in commands:
-        Popen(command).wait()
+        Popen(lex(command)).wait()
 
 
 if __name__ == "__main__":
