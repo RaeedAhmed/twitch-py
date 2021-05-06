@@ -38,7 +38,7 @@ class App:
 | __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |    
 | |_ \ V  V /| | || (__| | | |_____| |_) | |_| |    
  \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |    
-                                   |_|    |___/ v1.2
+                                   |_|    |___/ v1.3
             """.splitlines()
         )
         divide = ("─" * round(t.columns / 1.5)).center(t.columns) + "\n"
@@ -545,9 +545,10 @@ def install(arg: str) -> None:
 
 if __name__ == "__main__":
     docs = """Usage: twitch-py [COMMAND]
-    -h, --help      Display help for commands
-    --update        Install twitch-py from latest git repo
-    --uninstall     Remove all associated files from system
+    -h, --help          Display help for commands
+    -s, --settings      Open settings file to edit
+    --update            Install twitch-py from latest git repo
+    --uninstall         Remove all associated files from system
     """
     arg = shutil.sys.argv[1:]
     if not arg:
@@ -569,6 +570,9 @@ if __name__ == "__main__":
         install("i")
     elif arg[0] in ["--uninstall", "uninstall"]:
         install("u")
+    elif arg[0] in ["-s", "--settings"]:
+        cmd = lex(f"open {confdir}/config/settings.toml")
+        Popen(cmd)
     else:
         print("Command not recognized. Use -h for help")
         print(docs)
