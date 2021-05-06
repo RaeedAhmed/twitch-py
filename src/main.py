@@ -33,25 +33,26 @@ class App:
         logo = "\n".join(
             line.center(t.columns)
             for line in """
- _            _ _       _
-| |___      _(_) |_ ___| |__        _ __  _   _
-| __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |
-| |_ \ V  V /| | || (__| | | |_____| |_) | |_| |
- \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |
-                                   |_|    |___/
+ _            _ _       _                           
+| |___      _(_) |_ ___| |__        _ __  _   _     
+| __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |    
+| |_ \ V  V /| | || (__| | | |_____| |_) | |_| |    
+ \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |    
+                                   |_|    |___/ v1.2
             """.splitlines()
         )
         divide = ("─" * round(t.columns / 1.5)).center(t.columns) + "\n"
         print(logo, App.url.center(t.columns), sep="\n", end=divide)
         (m := App.messages).append(message)
-        print(*[f"> {msg}" for msg in m[-min(len(m), (t.lines - 12)) :]], sep="\n")
+        print(*[f" > {msg}" for msg in m[-min(len(m), (t.lines - 12)) :]], sep="\n")
 
 
 @bt.hook("before_request")
 def _connect_db() -> None:
     db.connect()
     if not any(
-        path in bt.request.path for path in ["authenticate", "config", "settings", "error"]
+        path in bt.request.path
+        for path in ["authenticate", "config", "settings", "error"]
     ):
         Db.check_user()
 
@@ -105,13 +106,18 @@ class Helix:
 
     @staticmethod
     def headers() -> dict:
-        return {"Client-ID": Helix.client_id, "Authorization": f"Bearer {User.get().access_token}"}
+        return {
+            "Client-ID": Helix.client_id,
+            "Authorization": f"Bearer {User.get().access_token}",
+        }
 
     @staticmethod
     def get(params: str) -> list[dict]:
         try:
             with httpx.Client(headers=Helix.headers()) as session:
-                resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()["data"]
+                resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()[
+                    "data"
+                ]
             return resp
         except httpx.HTTPError as e:
             App.display(f"Error in handling request with params {params}. Error: {e}")
@@ -147,7 +153,9 @@ class Fetch:
             "Authorization": f"Bearer {access_token}",
         }
         try:
-            user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()["data"][0]
+            user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()[
+                "data"
+            ][0]
         except httpx.HTTPError as e:
             App.display(f"Error occurred: {e}")
             shutil.sys.exit()
@@ -163,7 +171,9 @@ class Fetch:
     @staticmethod
     async def live(ids: set[int]) -> list[dict]:
         tmp = list(ids)
-        id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]  # chunks of 100 ids
+        id_lists = [
+            tmp[x : x + 100] for x in range(0, len(tmp), 100)
+        ]  # chunks of 100 ids
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
             stream_list: list[httpx.Response] = await asyncio.gather(
                 *(
@@ -196,10 +206,14 @@ class Fetch:
                 game = Game.get(int(stream["game_id"]))
                 stream["box_art_url"] = game.box_art_url
             except ValueError:
-                stream["box_art_url"] = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
+                stream[
+                    "box_art_url"
+                ] = "https://static-cdn.jtvnw.net/ttv-static/404_boxart.jpg"
             stream["profile_image_url"] = channel.profile_image_url
             stream["uptime"] = time_elapsed(stream["started_at"])
-            stream["thumbnail_url"] = stream["thumbnail_url"].replace("-{width}x{height}", "")
+            stream["thumbnail_url"] = stream["thumbnail_url"].replace(
+                "-{width}x{height}", ""
+            )
         streams.sort(key=lambda stream: stream["viewer_count"], reverse=True)
         return streams
 
@@ -224,7 +238,9 @@ class Db:
         async with httpx.AsyncClient(headers=Helix.headers()) as session:
             resps: list[httpx.Response] = await asyncio.gather(
                 *(
-                    session.get(f"{Helix.endpoint}/{mode}?{'&'.join([f'id={i}' for i in i_list])}")
+                    session.get(
+                        f"{Helix.endpoint}/{mode}?{'&'.join([f'id={i}' for i in i_list])}"
+                    )
                     for i_list in id_lists
                 )
             )
@@ -345,8 +361,13 @@ def channel(channel, mode=None, data=None):
 def search():
     query = bt.request.query.q
     t = bt.request.query.t
-    mode, model, count = ("games", Game, 10) if t == "categories" else ("users", Streamer, 5)
-    ids = {int(result["id"]) for result in Helix.get(f"search/{t}?query={query}&first={count}")}
+    mode, model, count = (
+        ("games", Game, 10) if t == "categories" else ("users", Streamer, 5)
+    )
+    ids = {
+        int(result["id"])
+        for result in Helix.get(f"search/{t}?query={query}&first={count}")
+    }
     asyncio.run(Db.cache(ids, mode=mode))
     results = model.select().where(model.id.in_(ids))
     return bt.template("search.tpl", query=query, mode=mode, results=results)
@@ -355,7 +376,11 @@ def search():
 @bt.route("/following")
 def following():
     Db.update_follows()
-    follows = Streamer.select().where(Streamer.followed == True).order_by(Streamer.display_name)
+    follows = (
+        Streamer.select()
+        .where(Streamer.followed == True)
+        .order_by(Streamer.display_name)
+    )
     return bt.template("following.tpl", follows=follows)
 
 
@@ -442,7 +467,9 @@ def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
 def process_data(data: list[dict], mode: str) -> list[dict]:
     if mode == "vod":
         for vod in data:
-            vod["thumbnail_url"] = vod["thumbnail_url"].replace("%{width}x%{height}", "480x270")
+            vod["thumbnail_url"] = vod["thumbnail_url"].replace(
+                "%{width}x%{height}", "480x270"
+            )
             if not vod["thumbnail_url"]:
                 vod[
                     "thumbnail_url"
@@ -457,7 +484,9 @@ def process_data(data: list[dict], mode: str) -> list[dict]:
             clip["time_since"] = time_elapsed(clip["created_at"])
             clip["thumbnail_url"] = clip["thumbnail_url"].rsplit("-", 1)[0] + ".jpg"
         asyncio.run(
-            Db.cache({int(gid) for clip in data if (gid := clip["game_id"])}, mode="games")
+            Db.cache(
+                {int(gid) for clip in data if (gid := clip["game_id"])}, mode="games"
+            )
         )
         for clip in data:
             try:
@@ -474,16 +503,19 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
     to_fetch = [vod_id for clip in clips if (vod_id := clip["video_id"])]
     async with httpx.AsyncClient(headers=Helix.headers()) as session:
         vod_data = await asyncio.gather(
-            *(session.get(f"{Helix.endpoint}/videos?id={vod_id}") for vod_id in to_fetch)
+            *(
+                session.get(f"{Helix.endpoint}/videos?id={vod_id}")
+                for vod_id in to_fetch
+            )
         )
     vods = [resp.json()["data"][0] for resp in vod_data]
     for clip in clips:
         if clip["video_id"]:
             clip["vod"] = vods.pop(0)
             vod_id, timestamp = clip["video_id"], clip["created_at"]
-            vod_start = datetime.strptime(clip["vod"]["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(
-                tzinfo=timezone.utc
-            )
+            vod_start = datetime.strptime(
+                clip["vod"]["created_at"], "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=timezone.utc)
             timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
                 tzinfo=timezone.utc
             )
@@ -500,14 +532,47 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
     return clips
 
 
+def install(arg: str) -> None:
+    commands = []
+    commands.append(
+        lex(
+            "curl -sL -o twitch-install.sh https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh"
+        )
+    )
+    commands.append(lex("chmod +x twitch-install.sh"))
+    commands.append(lex(f"./twitch-install.sh -{arg}"))
+    commands.append(lex("rm twitch-install.sh"))
+    for command in commands:
+        Popen(command).wait()
+
+
 if __name__ == "__main__":
-    App.display("Launching server...")
-    try:
-        bt.run(server="waitress", host="localhost", port=8080, quiet=True)
-    except KeyboardInterrupt:
-        pass
-    except httpx.HTTPError as e:
-        App.display(f"Error: {e}. Retrying...")
-        bt.redirect(bt.request.path)
-    finally:
-        App.display("Exiting...")
+    docs = """Usage: twitch-py [COMMAND]
+    -h, --help      Display help for commands
+    --update        Install twitch-py from latest git repo
+    --uninstall     Remove all associated files from system
+    """
+    arg = shutil.sys.argv[1:]
+    if not arg:
+        App.display("Launching server...")
+        try:
+            bt.run(server="waitress", host="localhost", port=8080, quiet=True)
+        except KeyboardInterrupt:
+            pass
+        except httpx.HTTPError as e:
+            App.display(f"Error: {e}. Retrying...")
+            bt.redirect(bt.request.path)
+        finally:
+            App.display("Exiting...")
+    elif len(arg) > 1:
+        print("Too many arguments. Use -h for help")
+    elif arg[0] in ["-h", "--help", "help"]:
+        print(docs)
+    elif arg[0] in ["--update", "update"]:
+        install("i")
+    elif arg[0] in ["--uninstall", "uninstall"]:
+        install("u")
+    else:
+        print("Command not recognized. Use -h for help")
+        print(docs)
+    shutil.sys.exit()

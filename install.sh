@@ -56,7 +56,6 @@ dlFiles() {
     mkdir $CONFDIR
     cp -R $NAME/$NAME-master/src/config $CONFDIR
     cp -R $NAME/$NAME-master/src/views $CONFDIR
-    echo " > Installing Streamlink"
 }
 
 restoreDB() {
@@ -88,6 +87,7 @@ uninstall_() {
     else
         echo " > No backup database found"
     fi
+    echo " > twitch-py uninstalled"
 }
 
 while getopts iu option
