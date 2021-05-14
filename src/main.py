@@ -38,7 +38,7 @@ class App:
 | __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |    
 | |_ \ V  V /| | || (__| | | |_____| |_) | |_| |    
  \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |    
-                                   |_|    |___/ v1.3
+                                   |_|    |___/ v1.4
             """.splitlines()
         )
         divide = ("─" * round(t.columns / 1.5)).center(t.columns) + "\n"
@@ -55,6 +55,7 @@ def _connect_db() -> None:
         for path in ["authenticate", "config", "settings", "error"]
     ):
         Db.check_user()
+        Db.check_cache()
 
 
 @bt.hook("after_request")
@@ -96,7 +97,7 @@ class Game(BaseModel):
 class Helix:
     client_id = "o232r2a1vuu2yfki7j3208tvnx8uzq"
     redirect_uri = "http://localhost:8080/authenticate"
-    app_scopes = "user:edit+user:edit:follows"
+    app_scopes = "user:edit+user:edit:follows+user:read:follows"
     endpoint = "https://api.twitch.tv/helix"
     oauth = (
         "https://id.twitch.tv/oauth2/authorize?client_id="
@@ -228,6 +229,15 @@ class Db:
             return bt.redirect(Helix.oauth)
 
     @staticmethod
+    def check_cache():
+        if (Streamer.table_exists() and Game.table_exists()) is False:
+            db.create_tables([Streamer, Game])
+            App.display("Building cache")
+            follows = Fetch.follows(User.get().id)
+            asyncio.run(Db.cache(follows, "users"))
+            Streamer.update(followed=True).execute()
+
+    @staticmethod
     async def cache(ids: set[int], mode: str) -> None:
         """mode: 'users' or 'games'"""
         model = Streamer if mode == "users" else Game
@@ -310,12 +320,9 @@ def index():
 @bt.route("/authenticate")
 def authenticate():
     if access_token := bt.request.query.get("access_token"):
-        db.create_tables([User, Streamer, Game])
+        User.create_table()
         user = Fetch.user(access_token)
         App.display(f"Logged in as {user.display_name}")
-        follows = Fetch.follows(user.get().id)
-        asyncio.run(Db.cache(follows, "users"))
-        Streamer.update(followed=True).execute()
         return bt.redirect("/")
     return bt.template("authenticate.tpl")
 
@@ -546,6 +553,7 @@ def install(arg: str) -> None:
 if __name__ == "__main__":
     docs = """Usage: twitch-py [COMMAND]
     -h, --help          Display help for commands
+    -c, --clear-cache   Clear cached data while preserving login
     -s, --settings      Open settings file to edit
     --update            Install twitch-py from latest git repo
     --uninstall         Remove all associated files from system
@@ -566,8 +574,14 @@ if __name__ == "__main__":
         print("Too many arguments. Use -h for help")
     elif arg[0] in ["-h", "--help", "help"]:
         print(docs)
+    elif arg[0] in ["-c", "--clear-cache"]:
+        try:
+            App.display("Clearing cache...")
+            db.drop_tables([Streamer, Game])
+        except pw.OperationalError:
+            App.display("Database does not exist")
     elif arg[0] in ["--update", "update"]:
-        install("i")
+        install("d")
     elif arg[0] in ["--uninstall", "uninstall"]:
         install("u")
     elif arg[0] in ["-s", "--settings"]:
