@@ -6,6 +6,8 @@ NAME=twitch-py
 BIN=https://github.com/RaeedAhmed/$NAME/releases/latest/download/$NAME
 REPO=https://github.com/RaeedAhmed/$NAME.git
 BACKUP=/var/local/$NAME
+BUILD=build.sh
+
 
 setup() {
     for p in curl unzip streamlink
@@ -14,15 +16,18 @@ setup() {
             { echo >&2 "$p is not installed. Aborting."; exit 1; }
         done
     echo " > Starting twitch-py installation..."
-    mkdir $TEMPDIR
-    cd $TEMPDIR
+    if [[ $1 = "download" ]]
+    then
+        mkdir $TEMPDIR
+        cd $TEMPDIR
+    fi
     if ! [ -d $BACKUP ]; then
         sudo mkdir -p $BACKUP
         sudo touch $BACKUP/data.db
     fi
 }
 
-backupDB() {
+backup_db() {
     if [ -f $CONFDIR/data.db ]; then
         echo " > Backing up database to $BACKUP"
         sudo mv $BACKUP/data.db $BACKUP/data.db.old
@@ -30,7 +35,7 @@ backupDB() {
     fi
 }
 
-rmFiles() {
+rm_files() {
     if [ -d "$CONFDIR" ]; then
         echo " > Removing config files"
         rm -r $CONFDIR
@@ -45,10 +50,7 @@ rmFiles() {
     fi   
 }
 
-dlFiles() {
-    echo " > Downloading executable"
-    sudo curl -sL $BIN | sudo tee $EXEC >/dev/null
-    sudo chmod +x $EXEC
+dl_files() {
     echo " > Downloading repository"
     curl -sL https://github.com/RaeedAhmed/$NAME/archive/refs/heads/master.zip -o $NAME.zip
     unzip -q $NAME.zip -d $NAME
@@ -58,7 +60,13 @@ dlFiles() {
     cp -R $NAME/$NAME-master/src/views $CONFDIR
 }
 
-restoreDB() {
+dl_exec() {
+    echo " > Downloading executable"
+    sudo curl -sL $BIN | sudo tee $EXEC >/dev/null
+    sudo chmod +x $EXEC
+}
+
+restore_db() {
     if [ -f $BACKUP/data.db.old ]; then
     	echo " > Restoring backup DB from $BACKUP"
         cp $BACKUP/data.db $CONFDIR
@@ -68,20 +76,43 @@ restoreDB() {
 clean_() {
     cd ..
     sudo rm -r $TEMPDIR
-    echo " > Installation complete. Run 'twitch-py' to begin."
 }
 
-install_() {
-    setup
-    backupDB
-    rmFiles
-    dlFiles
-    restoreDB
+download_install() {
+    dl_files
+    dl_exec
     clean_
 }
 
+local_install() {
+    python3 -m venv .tmpv
+    source .tmpv/bin/activate
+    pip install -r requirements.txt
+    pip install pyinstaller
+    pyinstaller src/main.py --name "$NAME" --onefile
+    deactivate
+    sudo mv dist/$NAME $EXEC
+    rm -r dist build .tmpv "$NAME.spec"
+}
+
+installation() {
+    setup
+    backup_db
+    rm_files
+
+    if [[ $1 = "download" ]]
+    then
+        download_install
+    else
+        local_install
+    fi
+
+    restore_db
+    echo " > Installation complete. Run 'twitch-py' to begin."
+}
+
 uninstall_() {
-    rmFiles
+    rm_files
     if [ -d $BACKUP ]; then
         sudo rm -r $BACKUP
     else
@@ -90,13 +121,30 @@ uninstall_() {
     echo " > twitch-py uninstalled"
 }
 
-while getopts iu option
+documentation() {
+    echo "
+Usage: install -[arg]
+
+    -d	Download exec and files from repo
+    -l	Locally compile and install program
+    -u	Uninstall binary, config files, and backup db
+    -h 	View this documentation
+"
+}
+
+while getopts dluh option
 do
     case "${option}"
     in
-    i) install_; exit 1
+    d) installation "download"; exit 1
+    ;;
+    l) installation "local"; exit 1
     ;;
     u) uninstall_; exit 1
     ;;
+    h) documentation; exit 1
+    ;;
     esac
 done
+
+documentation
