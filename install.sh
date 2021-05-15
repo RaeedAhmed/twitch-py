@@ -14,7 +14,6 @@ setup() {
             { echo >&2 "$p is not installed. Aborting."; exit 1; }
         done
     echo " > Starting twitch-py installation..."
-    mkdir $CONFDIR
     if [[ $1 = "download" ]]
     then
         mkdir $TEMPDIR
@@ -54,6 +53,7 @@ dl_files() {
     curl -sL https://github.com/RaeedAhmed/$NAME/archive/refs/heads/master.zip -o $NAME.zip
     unzip -q $NAME.zip -d $NAME
     echo " > Configuring static files"
+    cp $NAME/$NAME-master/README.md $CONFDIR
     cp -R $NAME/$NAME-master/src/static $CONFDIR
     cp -R $NAME/$NAME-master/src/views $CONFDIR
 }
@@ -103,7 +103,7 @@ installation() {
     setup $1
     backup_db
     rm_files
-
+    mkdir $CONFDIR
     if [[ $1 = "download" ]]
     then
         download_install
