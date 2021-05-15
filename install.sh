@@ -6,8 +6,6 @@ NAME=twitch-py
 BIN=https://github.com/RaeedAhmed/$NAME/releases/latest/download/$NAME
 REPO=https://github.com/RaeedAhmed/$NAME.git
 BACKUP=/var/local/$NAME
-BUILD=build.sh
-
 
 setup() {
     for p in curl unzip streamlink
@@ -16,6 +14,7 @@ setup() {
             { echo >&2 "$p is not installed. Aborting."; exit 1; }
         done
     echo " > Starting twitch-py installation..."
+    mkdir $CONFDIR
     if [[ $1 = "download" ]]
     then
         mkdir $TEMPDIR
@@ -55,8 +54,7 @@ dl_files() {
     curl -sL https://github.com/RaeedAhmed/$NAME/archive/refs/heads/master.zip -o $NAME.zip
     unzip -q $NAME.zip -d $NAME
     echo " > Configuring static files"
-    mkdir $CONFDIR
-    cp -R $NAME/$NAME-master/src/config $CONFDIR
+    cp -R $NAME/$NAME-master/src/static $CONFDIR
     cp -R $NAME/$NAME-master/src/views $CONFDIR
 }
 
@@ -85,18 +83,24 @@ download_install() {
 }
 
 local_install() {
+    echo " > Spawning environment"
     python3 -m venv .tmpv
     source .tmpv/bin/activate
-    pip install -r requirements.txt
-    pip install pyinstaller
-    pyinstaller src/main.py --name "$NAME" --onefile
+    echo " > Loading dependencies"
+    pip install -q -r requirements.txt
+    pip install -q pyinstaller
+    echo " > Compiling binary"
+    pyinstaller src/main.py --name "$NAME" --onefile --log-level=CRITICAL
     deactivate
     sudo mv dist/$NAME $EXEC
     rm -r dist build .tmpv "$NAME.spec"
+    cp README.md $CONFDIR
+    cp -R src/static $CONFDIR
+    cp -R src/views $CONFDIR
 }
 
 installation() {
-    setup
+    setup $1
     backup_db
     rm_files
 
