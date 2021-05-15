@@ -3,7 +3,7 @@
     <head>
         <title>{{title or 'TwitchPy'}}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-        <link rel="stylesheet" href="/config/style.css" type="text/css">
+        <link rel="stylesheet" href="/static/style.css" type="text/css">
         <link href="https://css.gg/css?=|calendar-dates|eye|search|time|timer|user-add|user-remove|user" rel="stylesheet">
     </head>
     <body>

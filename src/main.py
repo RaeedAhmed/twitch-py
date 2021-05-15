@@ -84,7 +84,7 @@ class Streamer(BaseModel):
     broadcaster_type = pw.TextField(default="user")
     description = pw.TextField(default="Twitch streamer")
     profile_image_url = pw.TextField()
-    offline_image_url = pw.TextField(default="config/offline.jpg")
+    offline_image_url = pw.TextField(default="static/offline.jpg")
     followed = pw.BooleanField(default=False)
 
 
@@ -422,21 +422,21 @@ def top(t):
 
 @bt.route("/settings")
 def settings():
-    command = lex(f"open {confdir}/config/settings.toml")
+    command = lex(f"open {confdir}/static/settings.toml")
     if bt.request.query.get("open"):
         Popen(command)
         return bt.redirect("/settings")
     try:
-        config = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
+        config = toml.load(f"{confdir}/static/settings.toml")[f"{os_}"]
     except toml.TomlDecodeError as e:
         Popen(command)
         App.redirect_err(f"Could not parse settings file: {e}")
     return bt.template("settings.tpl", config=config)
 
 
-@bt.route("/config/<filename:path>")
+@bt.route("/static/<filename:path>")
 def send_static(filename):
-    return bt.static_file(filename, root=f"{confdir}/config/")
+    return bt.static_file(filename, root=f"{confdir}/static/")
 
 
 @bt.route("/error")
@@ -456,7 +456,7 @@ def time_elapsed(start: str, d="") -> str:
 
 
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
-    c = toml.load(f"{confdir}/config/settings.toml")[f"{os_}"]
+    c = toml.load(f"{confdir}/static/settings.toml")[f"{os_}"]
     if c["multi"] is False and App.process is not None:
         App.process.terminate()
     if mode == "live":
@@ -585,7 +585,7 @@ if __name__ == "__main__":
     elif arg[0] in ["--uninstall", "uninstall"]:
         install("u")
     elif arg[0] in ["-s", "--settings"]:
-        cmd = lex(f"open {confdir}/config/settings.toml")
+        cmd = lex(f"open {confdir}/static/settings.toml")
         Popen(cmd)
     else:
         print("Command not recognized. Use -h for help")
