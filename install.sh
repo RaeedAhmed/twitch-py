@@ -23,6 +23,12 @@ setup() {
         sudo mkdir -p $BACKUP
         sudo touch $BACKUP/data.db
     fi
+    if ! [ -d /usr/local/bin ]; then
+        sudo mkdir -p /usr/local/bin
+    fi
+    if ! [ -d $CONFDIR/cache/ ]; then
+        mkdir -p $CONFDIR/cache/game $CONFDIR/cache/streamer
+    fi
 }
 
 backup_db() {
