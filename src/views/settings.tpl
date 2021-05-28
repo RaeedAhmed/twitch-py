@@ -9,7 +9,7 @@
         <tbody>
             % for key in config:
             <tr>
-                <td> {{key}} </th>
+                <td> {{key}} </td>
                 <td> {{config[key]}} </td>
             </tr>
             % end
