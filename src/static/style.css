@@ -163,12 +163,12 @@ button[value="Unfollow"]:hover, button[value="logout"]:hover {
     color: var(--bg-color);
 }
 
-button[value="Follow"] {
+button[value="Follow"], button[id=watch] {
     color: #90ee90;
     border-color: #90ee90;
 }
 
-button[value="Follow"]:hover {
+button[value="Follow"]:hover, button[id=watch]:hover {
     background-color: #90ee90;
     color: var(--bg-color);
 }
@@ -191,12 +191,12 @@ main#top_games {
     color: #ff496c;
 }
 
-p[broadcaster-type="partner"]::after {
+div[broadcaster-type="partner"]::after {
     color: magenta;
     content: attr(broadcaster-type);
 }
 
-p[broadcaster-type="affiliate"]::after {
+div[broadcaster-type="affiliate"]::after {
     color: mediumpurple;
     content: attr(broadcaster-type);
 }
