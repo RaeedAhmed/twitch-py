@@ -1,6 +1,7 @@
 #!/bin/bash
 TEMPDIR=twitch-tmp
 CONFDIR=$HOME/.config/twitch-py
+CACHEDIR=$HOME/.cache/twitch-py
 EXEC=/usr/local/bin/twitch-py
 NAME=twitch-py
 BIN=https://github.com/RaeedAhmed/$NAME/releases/latest/download/$NAME
@@ -26,8 +27,8 @@ setup() {
     if ! [ -d /usr/local/bin ]; then
         sudo mkdir -p /usr/local/bin
     fi
-    if ! [ -d $CONFDIR/cache/ ]; then
-        mkdir -p $CONFDIR/cache/game $CONFDIR/cache/streamer
+    if ! [ -d $CACHEDIR ]; then
+        mkdir -p $CACHEDIR/games $CACHEDIR/users
     fi
 }
 
