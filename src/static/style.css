@@ -143,12 +143,22 @@ nav button {
     padding-left: 5px;
 }
 
-button[value="Unfollow"] {
+button[value="cache"] {
+    color: #f8f274;
+    border-color: #f8f274;
+}
+
+button[value="cache"]:hover {
+    background-color: #f8f274;
+    color: var(--bg-color);
+}
+
+button[value="Unfollow"], button[value="logout"] {
     color: #ff496c;
     border-color: #ff496c;
 }
 
-button[value="Unfollow"]:hover {
+button[value="Unfollow"]:hover, button[value="logout"]:hover {
     background-color: #ff496c;
     color: var(--bg-color);
 }
@@ -206,6 +216,15 @@ p[broadcaster-type="affiliate"]::after {
 .card {
     white-space: nowrap;
     overflow: hidden;
+}
+
+table {
+    border: var(--text-color) solid 1px;
+}
+
+td {
+    border: var(--text-color) solid 1px;
+    padding: 4px;
 }
 
 footer {
