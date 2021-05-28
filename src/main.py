@@ -1,6 +1,7 @@
 import asyncio
 import shutil
 from collections import namedtuple
+from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from shlex import split as lex
 from subprocess import DEVNULL, Popen
@@ -17,21 +18,27 @@ cachedir = shutil.os.path.expanduser("~") + "/.cache/twitch-py"
 db = pw.SqliteDatabase(f"{confdir}/data.db")
 os_ = shutil.sys.platform.lower()
 Image = namedtuple("Image", "id url")
+Result = namedtuple("Result", "query model")
 
 
 class App:
-    process: Popen = None
-    url = "http://localhost:8080/"
-    messages = []
-    error = None
-
-    @classmethod
-    def redirect_err(cls, error: str) -> bt.redirect:
-        setattr(cls, "error", error)
-        return bt.redirect("/error")
+    process: Popen = None  # Holds process id of current stream/vod
+    url = "http://localhost:8080/"  # Index page of local site
+    messages = []  # Log of events since application start
+    errors = {
+        400: "Bad Request",
+        404: "Not Found",
+        500: "Server Error",
+        502: "Bad Gateway",
+    }
 
     @staticmethod
     def display(message: str = "") -> None:
+        """
+        Reprints terminal screen with most recent event messages
+
+        Re-centers logo and change list length based on terminal size
+        """
         shutil.os.system("clear")
         t = shutil.get_terminal_size()
         logo = "\n".join(
@@ -53,27 +60,42 @@ class App:
 
 @bt.hook("before_request")
 def _connect_db() -> None:
+    """
+    The following is run at the start of each page request (user action on webpage)
+    """
     db.connect()
     if not any(
         path in bt.request.path
         for path in ["authenticate", "config", "settings", "error"]
     ):
-        Db.check_user()
-        Db.check_cache()
+        Db.check_user()  # Redirect to login if no user in data.db
+        Db.check_cache()  # If no cache but user login, run initial cache from follows
 
 
 @bt.hook("after_request")
 def _close_db() -> None:
+    """
+    The following is run after server fulfills page request
+    """
     if not db.is_closed():
-        db.close()
+        db.close()  # Terminate connection with data.db
 
 
 class BaseModel(pw.Model):
+    """
+    Base class for database models, where data.db is the shared database
+    """
+
     class Meta:
         database = db
 
 
 class User(BaseModel):
+    """
+    Model/table for the user login. Necessary to store access token for
+    Twitch Helix API requests
+    """
+
     id = pw.IntegerField()
     login = pw.TextField()
     display_name = pw.TextField()
@@ -82,23 +104,36 @@ class User(BaseModel):
 
 
 class Streamer(BaseModel):
+    """
+    Model/table for all Twitch streamers. Holds data for displaying content
+    on webpages, and boolean for whether streamer is followed by the user.
+    """
+
     id = pw.IntegerField(primary_key=True)
     login = pw.TextField()
     display_name = pw.TextField()
-    broadcaster_type = pw.TextField(default="user")
-    description = pw.TextField(default="Twitch streamer")
+    broadcaster_type = pw.TextField(default="user")  # If not partner/affiliate
+    description = pw.TextField(default="Twitch streamer")  # Default if no description
     profile_image_url = pw.TextField()
-    offline_image_url = pw.TextField(default="static/offline.jpg")
     followed = pw.BooleanField(default=False)
 
 
 class Game(BaseModel):
+    """
+    Holds data for presenting game names and box art. The box art stored
+    is a specified size that exists for all games (some sizes are incompatible)
+    """
+
     id = pw.IntegerField(primary_key=True)
     name = pw.TextField()
     box_art_url = pw.TextField()
 
 
 class Helix:
+    """
+    Application information to interface with the Helix API
+    """
+
     client_id = "o232r2a1vuu2yfki7j3208tvnx8uzq"
     redirect_uri = "http://localhost:8080/authenticate"
     app_scopes = "user:edit+user:edit:follows+user:read:follows"
@@ -111,6 +146,9 @@ class Helix:
 
     @staticmethod
     def headers() -> dict:
+        """
+        Prepares headers with app id and stored user-access-token from authentication
+        """
         return {
             "Client-ID": Helix.client_id,
             "Authorization": f"Bearer {User.get().access_token}",
@@ -118,6 +156,22 @@ class Helix:
 
     @staticmethod
     def get(params: str) -> list[dict]:
+        """
+        Blueprint for http requests specifically for Helix API
+        Includes necessary client-id and user access token
+        Input `params` is used to specify API endpoint as so:
+
+        https://api.twitch.tv/helix/<params>
+
+        The response is of json format
+        ```
+        {
+            "data": [{},{}],
+            "pagination":...
+        }
+        ```
+        and the `data` key is selected, which is of type `list[dict]`
+        """
         try:
             with httpx.Client(headers=Helix.headers(), timeout=None) as session:
                 resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()[
@@ -126,9 +180,33 @@ class Helix:
             return resp
         except httpx.HTTPError as e:
             App.display(f"Error in handling request with params {params}. Error: {e}")
+            bt.abort(code=502, text=f"Error in handling request with params {params}")
 
     @staticmethod
     def get_iter(params: str) -> list[dict]:
+        """
+        Blueprint for http requests specifically for Helix API
+        Includes necessary client-id and user access token
+        Input `params` is used to specify API endpoint as so:
+
+        https://api.twitch.tv/helix/<params>
+
+        The response is of json format
+        ```
+        {
+            "data": [{},{}],
+            "pagination":
+            {"cursor" : [0-9a-zA-Z]+}
+        }
+        ```
+
+        The response's `data` field (of type `list[dict]`) is appended to `results`
+
+        The `pagination` cursor, if it exists, is used as a request parameter for a
+        subsequent request at the same endpoint to show the next series of results
+
+        Iterates requests with new index of results until no more data is found
+        """
         results, data = [], []
         with httpx.Client(headers=Helix.headers(), timeout=None) as session:
             while True:
@@ -137,6 +215,9 @@ class Helix:
                     data: list[dict] = resp["data"]
                 except httpx.HTTPError as e:
                     App.display(f"Error with {resp}. Caused the error {e}")
+                    bt.abort(
+                        code=502, text=f"Error with request {Helix.endpoint}/{params}"
+                    )
                 if data == []:
                     break
                 results += data
@@ -153,6 +234,15 @@ class Helix:
 class Fetch:
     @staticmethod
     def user(access_token: str) -> User:
+        """
+        Once user logs in via the twitch portal, the access token taken from
+        the /authentication uri is used to fetch user data and populate the 'user'
+        table in `data.db`.
+
+        https://api.twitch.tv/helix/users
+
+        headers contain unique user access token (required)
+        """
         headers = {
             "Client-ID": Helix.client_id,
             "Authorization": f"Bearer {access_token}",
@@ -161,8 +251,9 @@ class Fetch:
             user: dict = httpx.get(
                 f"{Helix.endpoint}/users", headers=headers, timeout=None
             ).json()["data"][0]
-        except httpx.HTTPError as e:
+        except Exception as e:
             App.display(f"Error occurred: {e}")
+            bt.abort(code=500, text="Error in fetching user data")
             shutil.sys.exit()
         user["access_token"] = access_token
         user["id"] = int(user["id"])
@@ -170,15 +261,23 @@ class Fetch:
 
     @staticmethod
     def follows(id: int) -> set[int]:
+        """
+        Fetches id numbers of user's followed channels.
+        https://api.twitch.tv/helix/users/follows?from_id=<user_id>
+        """
         resp = Helix.get_iter(f"users/follows?from_id={id}&first=100")
         return {int(follow["to_id"]) for follow in resp}
 
     @staticmethod
     async def live(ids: set[int]) -> list[dict]:
+        """
+        Input: set of user ids.
+        Splits ids in chunks of 100 (limit of API endpoint) and fetches stream data.
+        If channel is not live, data is empty, thus only live stream info is returned.
+        https://api.twitch.tv/helix/streams?user_id=<id1>&...&user_id=<id100>
+        """
         tmp = list(ids)
-        id_lists = [
-            tmp[x : x + 100] for x in range(0, len(tmp), 100)
-        ]  # chunks of 100 ids
+        id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]
         async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
             stream_list: list[httpx.Response] = await asyncio.gather(
                 *(
@@ -197,6 +296,11 @@ class Fetch:
 
     @staticmethod
     def stream_info(streams: list[dict]) -> list[dict]:
+        """
+        From stream data, cache games and users from their ids.
+        Caching fetches additional data which is then appended to stream data dict
+        """
+
         async def cache():
             tasks = []
             for args in [("game_id", "games"), ("user_id", "users")]:
@@ -228,12 +332,17 @@ class Db:
 
     @staticmethod
     def check_user() -> bt.redirect:
+        """
+        Check if User is logged in (table exists in data.db).
+        Redirect to authentication page if no user
+        """
         if db.table_exists("user") is False or User.get_or_none() is None:
             App.display("No user found. Please log in.")
             return bt.redirect(Helix.oauth)
 
     @staticmethod
     def check_cache():
+        """Initial creation of database tables and caching if tables do not exist"""
         if (Streamer.table_exists() and Game.table_exists()) is False:
             db.create_tables([Streamer, Game])
             App.display("Building cache")
@@ -243,12 +352,20 @@ class Db:
 
     @staticmethod
     async def cache(ids: set[int], mode: str) -> None:
-        """mode: 'users' or 'games'"""
+        """
+        Caching mode: 'users' or 'games'.
+        If game/streamer id does not exist in database, send to caching.
+        https://api.twitch.tv/helix/<'games' or 'users'>?id=<id1>&id=<id2>...
+        """
+
         model = Streamer if mode == "users" else Game
+        tag = "box_art_url" if mode == "games" else "profile_image_url"
+
         tmp = [i for i in ids if model.get_or_none(i) is None]
         if not tmp:
             return None
         id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]
+
         async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
             resps: list[httpx.Response] = await asyncio.gather(
                 *(
@@ -258,12 +375,12 @@ class Db:
                     for i_list in id_lists
                 )
             )
+
         data = []
         for resp in resps:
             datum: list[dict] = resp.json()["data"]
             if datum:
                 data += datum
-
         for datum in data:
             if mode == "games":
                 datum["box_art_url"] = datum["box_art_url"].replace(
@@ -271,35 +388,34 @@ class Db:
                 )
             else:
                 for key in Db.key_defaults:
-                    if not datum[key]:
+                    if not datum[key]:  # Remove to replace with key's default
                         datum.pop(key)
 
-        tag, path = (
-            ("box_art_url", "game")
-            if mode == "games"
-            else ("profile_image_url", "streamer")
-        )
-
+        # `tag` key different for game datum and user datum
         images = [Image(datum["id"], datum[tag]) for datum in data]
 
-        async def download_image(image: Image, session: httpx.AsyncClient):
-            data = await session.get(image.url)
-            with open(f"{cachedir}/{path}/{image.id}.jpg", "wb") as f:
-                f.write(data.content)
+        def download_image(image: Image) -> None:
+            """Get image data from url, write to file with `mode` directory
+            and datum `id` as the filename"""
+            data = httpx.get(image.url).content
+            with open(f"{cachedir}/{mode}/{image.id}.jpg", "wb") as f:
+                f.write(data)
 
-        async with httpx.AsyncClient(timeout=None) as session:
-            tasks = []
-            for image in images:
-                tasks.append(download_image(image, session))
-            await asyncio.gather(*tasks)
+        with ThreadPoolExecutor() as tp:
+            tp.map(download_image, images)
 
         for datum in data:
-            datum[tag] = f"{cachedir}/{path}/{datum['id']}.jpg"
+            datum[tag] = f"/cache/{mode}/{datum['id']}.jpg"  # Point to file path
             datum["id"] = int(datum["id"])
-            model.create(**datum)
+            model.create(**datum)  # Discards unused keys
 
     @staticmethod
     def update_follows() -> set[int]:
+        """
+        Fetch user's current follows and cache
+
+        Toggle channel follow if follow in database and current do not match
+        """
         follows = Fetch.follows(User.get().id)
         asyncio.run(Db.cache(follows, "users"))
         streamers: list[Streamer] = [streamer for streamer in Streamer.select()]
@@ -316,6 +432,7 @@ class Db:
 
     @staticmethod
     async def toggle_follow(streamers: set[Streamer]) -> None:
+        """Send http POST or DELETE based on value of follow after toggling"""
         url = f"{Helix.endpoint}/users/follows"
 
         async def send(session: httpx.AsyncClient, data: dict, streamer: Streamer):
@@ -339,6 +456,7 @@ class Db:
 
 @bt.route("/")
 def index():
+    """Index of web application. Displays live streams of user's follows"""
     follows = Db.update_follows()
     streams = Fetch.stream_info(asyncio.run(Fetch.live(follows)))
     return bt.template("index.tpl", User=User.get(), streams=streams)
@@ -346,6 +464,11 @@ def index():
 
 @bt.route("/authenticate")
 def authenticate():
+    """
+    User is prompted with login portal. After login, uri redirect includes
+    access token. Javascript in `authenticate.tpl` grabs this token which is
+    used to fetch user information which is then cached along with token.
+    """
     if access_token := bt.request.query.get("access_token"):
         User.create_table()
         user = Fetch.user(access_token)
@@ -356,12 +479,13 @@ def authenticate():
 
 @bt.route("/<channel>")
 def channel(channel, mode=None, data=None):
+    """Profile page of channel"""
     try:
         channel: Streamer = Streamer.get(
             (Streamer.display_name == channel) | (Streamer.login == channel)
         )
     except pw.DoesNotExist:
-        App.redirect_err("Page not found")
+        bt.abort(code=404, text="User does not exist")
     date = {"start": "", "end": ""}
     if bt.request.query.get("follow"):
         asyncio.run(Db.toggle_follow({channel}))
@@ -393,22 +517,33 @@ def channel(channel, mode=None, data=None):
 
 @bt.route("/search")
 def search():
+    """
+    List results that match search query string and cache results based on id
+    For categories, display data from database based on id
+    For channels, display data from database as well as request data from endpoint
+    """
     query = bt.request.query.q
     t = bt.request.query.t
     mode, model, count = (
         ("games", Game, 10) if t == "categories" else ("users", Streamer, 5)
     )
-    ids = {
-        int(result["id"])
-        for result in Helix.get(f"search/{t}?query={query}&first={count}")
-    }
+    search_results = Helix.get(f"search/{t}?query={query}&first={count}")
+    ids = {int(result["id"]) for result in search_results}
+
     asyncio.run(Db.cache(ids, mode=mode))
-    results = model.select().where(model.id.in_(ids))
+    if t == "categories":
+        results = model.select().where(model.id.in_(ids))
+    else:
+        results = [
+            Result(result, model.get_by_id(int(result["id"])))
+            for result in search_results
+        ]
     return bt.template("search.tpl", query=query, mode=mode, results=results)
 
 
 @bt.route("/following")
 def following():
+    """Read data.db for users with `followed == True`"""
     Db.update_follows()
     follows = (
         Streamer.select()
@@ -420,6 +555,10 @@ def following():
 
 @bt.route("/categories/<game_id>")
 def browse(game_id="all"):
+    """
+    `/all` View list of games by viewer count
+    `/<game_id>` View top streams under game category
+    """
     if game_id == "all":
         return bt.redirect("/top/games")
     else:
@@ -429,11 +568,15 @@ def browse(game_id="all"):
             data = Fetch.stream_info(streams)
             return bt.template("top.tpl", data=data, t="channels_filter", game=game)
         except httpx.HTTPError:
-            App.redirect_err("Page not found")
+            bt.abort(code=404, text=f"Cannot find streams for game id {game_id}")
 
 
 @bt.route("/top/<t>")
 def top(t):
+    """
+    `/games` View list of top games by total viewer count
+    `/streams` View list of top streams across platform
+    """
     if t == "channels":
         top_streams = Helix.get("streams?first=50")
         data = Fetch.stream_info(top_streams)
@@ -443,12 +586,16 @@ def top(t):
         data = list(Game.select().where(Game.id.in_(games)))
         data.sort(key=lambda x: games.index(x.id))
     else:
-        App.redirect_err("Page not found")
+        bt.abort(code=400, text="Not a valid type for /top")
     return bt.template("top.tpl", data=data, t=t)
 
 
 @bt.route("/settings")
 def settings():
+    """
+    Settings page to view current settings, open settings file,
+    clear cache, and log out.
+    """
     command = lex(f"xdg-open {confdir}/static/settings.toml")
     if bt.request.query.get("open"):
         Popen(command)
@@ -456,35 +603,54 @@ def settings():
     elif bt.request.query.get("cache"):
         App.display("Clearing cache...")
         db.drop_tables([Streamer, Game])
+        shutil.os.system(f"rm -f {cachedir}/games/* {cachedir}/users/*")
+        return bt.redirect("/settings")
     elif bt.request.query.get("logout"):
-        App.display("Clearing all data...")
+        App.display("Logging out...")
         db.drop_tables([User, Streamer, Game])
-        shutil.rmtree(f"{cachedir}")
-        shutil.os.mkdir(f"{cachedir}")
+        return bt.redirect("/settings")
     try:
         config = toml.load(f"{confdir}/static/settings.toml")[f"{os_}"]
     except toml.TomlDecodeError as e:
         Popen(command)
-        App.redirect_err(f"Could not parse settings file: {e}")
+        bt.abort(code=404, text="Could not parse settings.toml")
     return bt.template("settings.tpl", config=config)
 
 
 @bt.route("/static/<filename:path>")
 def send_static(filename):
+    """Serve files located in configuration directory"""
     return bt.static_file(filename, root=f"{confdir}/static/")
 
 
-@bt.route("<filename:path>")
+@bt.route("/cache/<filename:path>")
 def cache(filename):
-    return bt.static_file(filename, root="/")
+    """Serve images cached in ~/.cache/twitch-py"""
+    return bt.static_file(filename, root=f"{cachedir}/")
 
 
-@bt.route("/error")
-def error_page():
-    return bt.template("error_page.tpl", error=App.error)
+@bt.error(400)
+def error400(error):
+    return bt.template("error_page.tpl", code=App.errors[400], error=error)
+
+
+@bt.error(404)
+def error404(error):
+    return bt.template("error_page.tpl", code=App.errors[404], error=error)
+
+
+@bt.error(500)
+def error500(error):
+    return bt.template("error_page.tpl", code=App.errors[500], error=error)
+
+
+@bt.error(502)
+def error502(error):
+    return bt.template("error_page.tpl", code=App.errors[502], error=error)
 
 
 def time_elapsed(start: str, d="") -> str:
+    """Use 'started_at' key and current time to calculated time since"""
     start = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     current = datetime.now(tz=timezone.utc)
     elapsed = round((current - start).total_seconds())
@@ -496,6 +662,10 @@ def time_elapsed(start: str, d="") -> str:
 
 
 def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
+    """
+    Save process if of running video as App attribute for later termination.
+    Passes through player and arg settings from `settings.toml`.
+    """
     c = toml.load(f"{confdir}/static/settings.toml")[f"{os_}"]
     if c["multi"] is False and App.process is not None:
         App.process.terminate()
@@ -512,6 +682,10 @@ def watch_video(channel: str = "", mode: str = "live", url: str = "") -> None:
 
 
 def process_data(data: list[dict], mode: str) -> list[dict]:
+    """
+    Format data of vod/clip for presenting. For clips, cache game data
+    and fetch relevant vod with timestamp of clip.
+    """
     if mode == "vod":
         for vod in data:
             vod["thumbnail_url"] = vod["thumbnail_url"].replace(
@@ -547,6 +721,10 @@ def process_data(data: list[dict], mode: str) -> list[dict]:
 
 
 async def vod_from_clip(clips: list[dict]) -> list[dict]:
+    """
+    Fetch vod clip was taken from if it exists. Calculate timestamp of clip in
+    vod using formatted date strings.
+    """
     to_fetch = [vod_id for clip in clips if (vod_id := clip["video_id"])]
     async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
         vod_data = await asyncio.gather(
@@ -558,7 +736,7 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
     vods = [resp.json()["data"][0] for resp in vod_data]
     for clip in clips:
         if clip["video_id"]:
-            clip["vod"] = vods.pop(0)
+            clip["vod"] = vods.pop(0)  # Consume vod if vod exists for clip
             vod_id, timestamp = clip["video_id"], clip["created_at"]
             vod_start = datetime.strptime(
                 clip["vod"]["created_at"], "%Y-%m-%dT%H:%M:%SZ"
@@ -580,6 +758,7 @@ async def vod_from_clip(clips: list[dict]) -> list[dict]:
 
 
 def install(arg: str) -> None:
+    """Run the latest installation script without having to clone repo if app installed"""
     commands = [
         "curl -sL -o twitch-install.sh https://raw.githubusercontent.com/RaeedAhmed/twitch-py/master/install.sh",
         "chmod +x twitch-install.sh",
@@ -618,8 +797,7 @@ if __name__ == "__main__":
         try:
             App.display("Clearing cache...")
             db.drop_tables([Streamer, Game])
-            shutil.rmtree(f"{cachedir}")
-            shutil.os.mkdir(f"{cachedir}")
+            shutil.os.system(f"rm -f {cachedir}/games/* {cachedir}/users/*")
         except pw.OperationalError:
             App.display("Database or cache does not exist")
     elif arg[0] in ["--update", "update"]:
