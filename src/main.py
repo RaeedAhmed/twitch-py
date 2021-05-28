@@ -1,5 +1,6 @@
 import asyncio
 import shutil
+from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 from shlex import split as lex
 from subprocess import DEVNULL, Popen
@@ -8,11 +9,14 @@ import bottle as bt
 import httpx
 import peewee as pw
 import toml
+from waitress import serve
 
 confdir = shutil.os.path.expanduser("~") + "/.config/twitch-py"
 bt.TEMPLATE_PATH.insert(0, f"{confdir}/views")
+cachedir = shutil.os.path.expanduser("~") + "/.cache/twitch-py"
 db = pw.SqliteDatabase(f"{confdir}/data.db")
 os_ = shutil.sys.platform.lower()
+Image = namedtuple("Image", "id url")
 
 
 class App:
@@ -38,7 +42,7 @@ class App:
 | __\ \ /\ / / | __/ __| '_ \ _____| '_ \| | | |    
 | |_ \ V  V /| | || (__| | | |_____| |_) | |_| |    
  \__| \_/\_/ |_|\__\___|_| |_|     | .__/ \__, |    
-                                   |_|    |___/ v1.4
+                                   |_|    |___/ v1.5
             """.splitlines()
         )
         divide = ("─" * round(t.columns / 1.5)).center(t.columns) + "\n"
@@ -115,7 +119,7 @@ class Helix:
     @staticmethod
     def get(params: str) -> list[dict]:
         try:
-            with httpx.Client(headers=Helix.headers()) as session:
+            with httpx.Client(headers=Helix.headers(), timeout=None) as session:
                 resp: list[dict] = session.get(f"{Helix.endpoint}/{params}").json()[
                     "data"
                 ]
@@ -126,7 +130,7 @@ class Helix:
     @staticmethod
     def get_iter(params: str) -> list[dict]:
         results, data = [], []
-        with httpx.Client(headers=Helix.headers()) as session:
+        with httpx.Client(headers=Helix.headers(), timeout=None) as session:
             while True:
                 resp = session.get(f"{Helix.endpoint}/{params}").json()
                 try:
@@ -154,9 +158,9 @@ class Fetch:
             "Authorization": f"Bearer {access_token}",
         }
         try:
-            user: dict = httpx.get(f"{Helix.endpoint}/users", headers=headers).json()[
-                "data"
-            ][0]
+            user: dict = httpx.get(
+                f"{Helix.endpoint}/users", headers=headers, timeout=None
+            ).json()["data"][0]
         except httpx.HTTPError as e:
             App.display(f"Error occurred: {e}")
             shutil.sys.exit()
@@ -175,7 +179,7 @@ class Fetch:
         id_lists = [
             tmp[x : x + 100] for x in range(0, len(tmp), 100)
         ]  # chunks of 100 ids
-        async with httpx.AsyncClient(headers=Helix.headers()) as session:
+        async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
             stream_list: list[httpx.Response] = await asyncio.gather(
                 *(
                     session.get(
@@ -245,7 +249,7 @@ class Db:
         if not tmp:
             return None
         id_lists = [tmp[x : x + 100] for x in range(0, len(tmp), 100)]
-        async with httpx.AsyncClient(headers=Helix.headers()) as session:
+        async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
             resps: list[httpx.Response] = await asyncio.gather(
                 *(
                     session.get(
@@ -259,8 +263,8 @@ class Db:
             datum: list[dict] = resp.json()["data"]
             if datum:
                 data += datum
+
         for datum in data:
-            datum["id"] = int(datum["id"])
             if mode == "games":
                 datum["box_art_url"] = datum["box_art_url"].replace(
                     "-{width}x{height}", "-285x380"
@@ -269,6 +273,29 @@ class Db:
                 for key in Db.key_defaults:
                     if not datum[key]:
                         datum.pop(key)
+
+        tag, path = (
+            ("box_art_url", "game")
+            if mode == "games"
+            else ("profile_image_url", "streamer")
+        )
+
+        images = [Image(datum["id"], datum[tag]) for datum in data]
+
+        async def download_image(image: Image, session: httpx.AsyncClient):
+            data = await session.get(image.url)
+            with open(f"{cachedir}/{path}/{image.id}.jpg", "wb") as f:
+                f.write(data.content)
+
+        async with httpx.AsyncClient(timeout=None) as session:
+            tasks = []
+            for image in images:
+                tasks.append(download_image(image, session))
+            await asyncio.gather(*tasks)
+
+        for datum in data:
+            datum[tag] = f"{cachedir}/{path}/{datum['id']}.jpg"
+            datum["id"] = int(datum["id"])
             model.create(**datum)
 
     @staticmethod
@@ -302,7 +329,7 @@ class Db:
                 App.display(f"Following {streamer.display_name}")
                 await session.post(url, params=data)
 
-        async with httpx.AsyncClient(headers=Helix.headers()) as session:
+        async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
             tasks = []
             for streamer in streamers:
                 data = {"to_id": str(streamer.id), "from_id": str(User.get().id)}
@@ -422,10 +449,18 @@ def top(t):
 
 @bt.route("/settings")
 def settings():
-    command = lex(f"open {confdir}/static/settings.toml")
+    command = lex(f"xdg-open {confdir}/static/settings.toml")
     if bt.request.query.get("open"):
         Popen(command)
         return bt.redirect("/settings")
+    elif bt.request.query.get("cache"):
+        App.display("Clearing cache...")
+        db.drop_tables([Streamer, Game])
+    elif bt.request.query.get("logout"):
+        App.display("Clearing all data...")
+        db.drop_tables([User, Streamer, Game])
+        shutil.rmtree(f"{cachedir}")
+        shutil.os.mkdir(f"{cachedir}")
     try:
         config = toml.load(f"{confdir}/static/settings.toml")[f"{os_}"]
     except toml.TomlDecodeError as e:
@@ -437,6 +472,11 @@ def settings():
 @bt.route("/static/<filename:path>")
 def send_static(filename):
     return bt.static_file(filename, root=f"{confdir}/static/")
+
+
+@bt.route("<filename:path>")
+def cache(filename):
+    return bt.static_file(filename, root="/")
 
 
 @bt.route("/error")
@@ -508,7 +548,7 @@ def process_data(data: list[dict], mode: str) -> list[dict]:
 
 async def vod_from_clip(clips: list[dict]) -> list[dict]:
     to_fetch = [vod_id for clip in clips if (vod_id := clip["video_id"])]
-    async with httpx.AsyncClient(headers=Helix.headers()) as session:
+    async with httpx.AsyncClient(headers=Helix.headers(), timeout=None) as session:
         vod_data = await asyncio.gather(
             *(
                 session.get(f"{Helix.endpoint}/videos?id={vod_id}")
@@ -562,7 +602,7 @@ if __name__ == "__main__":
     if not arg:
         App.display("Launching server...")
         try:
-            bt.run(server="waitress", host="localhost", port=8080, quiet=True)
+            serve(app=bt.app(), host="localhost", threads=16, port=8080)
         except KeyboardInterrupt:
             pass
         except httpx.HTTPError as e:
@@ -578,14 +618,16 @@ if __name__ == "__main__":
         try:
             App.display("Clearing cache...")
             db.drop_tables([Streamer, Game])
+            shutil.rmtree(f"{cachedir}")
+            shutil.os.mkdir(f"{cachedir}")
         except pw.OperationalError:
-            App.display("Database does not exist")
+            App.display("Database or cache does not exist")
     elif arg[0] in ["--update", "update"]:
         install("d")
     elif arg[0] in ["--uninstall", "uninstall"]:
         install("u")
     elif arg[0] in ["-s", "--settings"]:
-        cmd = lex(f"open {confdir}/static/settings.toml")
+        cmd = lex(f"xdg-open {confdir}/static/settings.toml")
         Popen(cmd)
     else:
         print("Command not recognized. Use -h for help")
