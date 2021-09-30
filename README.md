@@ -1,5 +1,8 @@
 # twitch-py
 
+## Repo is unmaintained. Further developments will occur in [twottle](https://github.com/RaeedAhmed/twottle)
+
+
 ## Installation
 
 ### Requirements
